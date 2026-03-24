@@ -2,209 +2,180 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa 3D Logístico - Lima Store</title>
+    <title>Mapa 3D Real - Lima Store</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Poppins', sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; background: #0f172a; }
-        .ui-panel { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
-        .btn-kb { background: #ff6500; transition: 0.3s; }
-        .btn-kb:hover { background: #e65c00; transform: scale(1.05); }
+        body { margin: 0; overflow: hidden; font-family: sans-serif; background: #0b0f1a; }
+        #canvas-container { width: 100vw; height: 100vh; }
+        .ui-panel { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .kb-orange { background: #ff6500; }
     </style>
 </head>
 <body>
 
     <div id="canvas-container"></div>
 
-    <div class="fixed top-0 left-0 w-full p-4 flex justify-between items-start z-50 pointer-events-none">
-        <div class="ui-panel p-4 rounded-xl text-white pointer-events-auto">
-            <h1 class="text-xl font-black flex items-center gap-2">
+    <div class="fixed top-6 left-6 z-50 flex flex-col gap-4">
+        <div class="ui-panel p-6 rounded-2xl text-white w-80 shadow-2xl border-t-4 border-orange-500">
+            <h1 class="text-xl font-black mb-4 flex items-center gap-2 italic">
                 <i data-lucide="box" class="text-orange-500"></i> LIMA <span class="text-blue-400">3D LOG</span>
             </h1>
-            <p class="text-[10px] uppercase tracking-widest opacity-60">Gestão de Endereçamento Tiete</p>
-        </div>
-
-        <div class="flex flex-col gap-2 pointer-events-auto">
-            <button onclick="abrirModalRua()" class="btn-kb text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-xl">
-                <i data-lucide="plus-circle"></i> REGISTRAR NOVA RUA
-            </button>
-            <div class="ui-panel p-3 rounded-lg text-white text-xs">
-                <p>Botão Esquerdo: Rotacionar</p>
-                <p>Botão Direito: Mover</p>
-                <p>Scroll: Zoom</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="fixed bottom-6 left-6 w-80 ui-panel p-6 rounded-2xl text-white z-50">
-        <h2 class="font-bold mb-4 flex items-center gap-2 border-b border-white/10 pb-2">
-            <i data-lucide="truck"></i> OPERAÇÃO DE COLETA
-        </h2>
-        <div class="space-y-4">
-            <input type="text" id="input-bip" placeholder="Bipar Etiqueta ou SKU..." 
-                   class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none focus:border-orange-500 text-sm">
             
-            <div id="info-produto" class="hidden animate-pulse">
-                <p class="text-[10px] text-orange-400 font-bold uppercase">Produto Identificado:</p>
-                <p id="nome-item" class="font-bold text-sm">---</p>
-                <p id="local-item" class="text-xs opacity-70">Local: ---</p>
-                
-                <button onclick="realizarTransferencia()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2 transition">
-                    <i data-lucide="move-right"></i> TRANSFERÊNCIA (SAÍDA)
+            <label class="w-full kb-orange text-white py-2 px-4 rounded-lg font-bold text-xs flex items-center justify-center gap-2 cursor-pointer mb-4 hover:brightness-110 transition">
+                <i data-lucide="upload"></i> CARREGAR PLANILHA
+                <input type="file" id="up-excel" hidden onchange="importar(event)">
+            </label>
+
+            <input type="text" id="input-bip" placeholder="Bipar Etiqueta ou CF..." 
+                   class="w-full bg-slate-800 border border-slate-700 p-3 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 text-sm font-bold">
+            
+            <div id="info-produto" class="hidden mt-4 p-4 bg-white/5 rounded-xl border border-white/10 animate-in fade-in zoom-in duration-300">
+                <p class="text-[10px] text-orange-400 font-black uppercase tracking-widest">Produto Localizado:</p>
+                <p id="nome-item" class="font-bold text-sm leading-tight my-2">---</p>
+                <div class="flex justify-between text-[11px] font-mono text-blue-300 bg-blue-900/20 p-2 rounded">
+                    <span>Rua: <b id="rua-val">--</b></span>
+                    <span>Estante: <b id="est-val">--</b></span>
+                    <span>Prat: <b id="prat-val">--</b></span>
+                </div>
+                <button onclick="transferir()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg mt-4 text-xs transition uppercase shadow-lg">
+                    Transferência (Remover)
                 </button>
             </div>
         </div>
-    </div>
 
-    <div id="modal-rua" class="fixed inset-0 bg-black/70 hidden flex items-center justify-center z-[100] p-4">
-        <div class="bg-slate-900 w-full max-w-md rounded-2xl p-8 border border-white/10 shadow-2xl text-white">
-            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2 italic">
-                <i data-lucide="map" class="text-orange-500"></i> NOVO REGISTRO
-            </h2>
-            <div class="space-y-4">
-                <input type="text" id="n-produto" placeholder="Nome da Mercadoria" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
-                <div class="grid grid-cols-2 gap-4">
-                    <input type="number" id="n-rua" placeholder="Rua (Ex: 1)" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
-                    <input type="number" id="n-estante" placeholder="Estante (Ex: 5)" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
-                </div>
-                <input type="text" id="n-etiqueta" placeholder="Código da Etiqueta" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
-            </div>
-            <div class="mt-8 flex gap-3 text-sm">
-                <button onclick="fecharModalRua()" class="flex-1 bg-slate-700 p-3 rounded-lg font-bold">CANCELAR</button>
-                <button onclick="salvarNovoLocal()" class="flex-1 btn-kb p-3 rounded-lg font-bold">CADASTRAR</button>
-            </div>
+        <div class="ui-panel p-3 rounded-xl text-white/50 text-[10px] font-bold uppercase tracking-wider">
+            Itens no Mapa: <span id="count-itens" class="text-green-400">0</span>
         </div>
     </div>
 
     <script>
         lucide.createIcons();
 
-        // --- CONFIGURAÇÃO THREE.JS (MAPA 3D) ---
+        // --- ENGINE 3D ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        // Luzes
-        const light = new THREE.AmbientLight(0x404040, 2); scene.add(light);
-        const pointLight = new THREE.PointLight(0xffffff, 1); pointLight.position.set(10, 20, 10); scene.add(pointLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.set(20, 50, 20);
+        scene.add(dirLight);
 
-        // Chão (Grid)
-        const gridHelper = new THREE.GridHelper(100, 50, 0x444444, 0x222222);
-        scene.add(gridHelper);
+        // Chão Estilizado
+        const grid = new THREE.GridHelper(200, 80, 0x1e293b, 0x111827);
+        scene.add(grid);
 
-        const estantes3D = {}; // Armazena os objetos 3D das estantes
+        let blocos3D = {}; 
+        let estoque = [];
 
-        function criarEstante3D(rua, estante, etiqueta, cor = 0x334155) {
-            const geometry = new THREE.BoxGeometry(1.5, 3, 0.8);
-            const material = new THREE.MeshPhongMaterial({ color: cor });
-            const box = new THREE.Mesh(geometry, material);
-            
-            // Posicionamento baseado na Rua (X) e Estante (Z)
-            box.position.set(rua * 3, 1.5, estante * 2);
-            scene.add(box);
-            
-            // Adiciona borda brilhante
-            const edges = new THREE.EdgesGeometry(geometry);
-            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x64748b }));
-            box.add(line);
-
-            estantes3D[etiqueta] = box;
+        // FUNÇÃO DE IMPORTAÇÃO
+        function importar(e) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const data = new Uint8Array(event.target.result);
+                const wb = XLSX.read(data, {type: 'array'});
+                estoque = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                localStorage.setItem('dados_estoque', JSON.stringify(estoque));
+                montarMapa();
+            };
+            reader.readAsArrayBuffer(e.target.files[0]);
         }
 
-        camera.position.set(15, 15, 15);
-        camera.lookAt(0, 0, 0);
+        // MONTAGEM DO MAPA BASEADO NA SUA PLANILHA
+        function montarMapa() {
+            // Limpa mapa anterior
+            Object.values(blocos3D).forEach(b => scene.remove(b));
+            blocos3D = {};
 
-        function animate() {
-            requestAnimationFrame(animate);
-            renderer.render(scene, camera);
-        }
-        animate();
+            estoque.forEach(item => {
+                // Filtra apenas itens com localização
+                if (item.Andar && item.Estante) {
+                    const geometry = new THREE.BoxGeometry(1.4, 2.8, 0.9);
+                    const material = new THREE.MeshPhongMaterial({ color: 0x2d3748, transparent: true, opacity: 0.9 });
+                    const cube = new THREE.Mesh(geometry, material);
 
-        // --- LÓGICA DO SISTEMA ---
-        let bancoLogistico = JSON.parse(localStorage.getItem('dados_log_3d') || "[]");
+                    // POSICIONAMENTO REAL:
+                    // Dividimos o Andar por 10 para as ruas não ficarem muito longe
+                    const posX = (parseInt(item.Andar) / 10) || 0;
+                    const posZ = (parseInt(item.Estante) * 2) || 0;
+                    const posY = (parseInt(item.Prateleira) / 10) || 1.4; // Eleva o bloco se tiver prateleira alta
+                    
+                    cube.position.set(posX, posY, posZ);
+                    scene.add(cube);
 
-        function carregarMapa() {
-            // Limpa o mapa e recarrega
-            bancoLogistico.forEach(item => {
-                criarEstante3D(item.rua, item.estante, item.etiqueta);
-            });
-        }
+                    // Borda Neon
+                    const edges = new THREE.EdgesGeometry(geometry);
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x3b82f6 }));
+                    cube.add(line);
 
-        // Bip de Mercadoria
-        document.getElementById('input-bip').addEventListener('input', (e) => {
-            const val = e.target.value;
-            const item = bancoLogistico.find(i => i.etiqueta === val || i.nome === val);
-
-            if(item) {
-                document.getElementById('info-produto').classList.remove('hidden');
-                document.getElementById('nome-item').innerText = item.nome;
-                document.getElementById('local-item').innerText = `Rua ${item.rua} | Estante ${item.estante}`;
-                
-                // Destaca no 3D
-                Object.values(estantes3D).forEach(obj => obj.material.color.setHex(0x334155)); // Reseta todos
-                const mesh = estantes3D[item.etiqueta];
-                if(mesh) {
-                    mesh.material.color.setHex(0xff6500); // Laranja KaBuM
-                    camera.position.set(mesh.position.x + 5, 5, mesh.position.z + 5);
-                    camera.lookAt(mesh.position);
+                    // Mapeia para busca
+                    if(item.Local_Etiqueta) blocos3D[String(item.Local_Etiqueta)] = cube;
+                    if(item.Codigo_CF) blocos3D[String(item.Codigo_CF)] = cube;
+                    
+                    cube.userData = item;
                 }
+            });
+            document.getElementById('count-itens').innerText = Object.keys(blocos3D).length;
+            camera.position.set(30, 30, 30);
+            camera.lookAt(0,0,0);
+        }
+
+        // BUSCA E ZOOM
+        document.getElementById('input-bip').addEventListener('input', (e) => {
+            const busca = String(e.target.value);
+            const bloco = blocos3D[busca];
+
+            // Reseta cores
+            Object.values(blocos3D).forEach(b => b.material.color.setHex(0x2d3748));
+
+            if (bloco) {
+                const d = bloco.userData;
+                document.getElementById('info-produto').classList.remove('hidden');
+                document.getElementById('nome-item').innerText = d.Nome_Produto;
+                document.getElementById('rua-val').innerText = d.Andar;
+                document.getElementById('est-val').innerText = d.Estante;
+                document.getElementById('prat-val').innerText = d.Prateleira || "0";
+                
+                bloco.material.color.setHex(0xff6500); // Laranja KaBuM
+
+                // Move Câmera para o objeto
+                const targetPos = new THREE.Vector3(bloco.position.x + 10, bloco.position.y + 10, bloco.position.z + 10);
+                camera.position.lerp(targetPos, 0.1);
+                camera.lookAt(bloco.position);
             } else {
                 document.getElementById('info-produto').classList.add('hidden');
             }
         });
 
-        function realizarTransferencia() {
-            const etq = document.getElementById('input-bip').value;
-            if(confirm("Confirmar transferência? O produto sairá deste local.")) {
-                // Remove do banco
-                bancoLogistico = bancoLogistico.filter(i => i.etiqueta !== etq);
-                localStorage.setItem('dados_log_3d', JSON.stringify(bancoLogistico));
-                
-                // Remove do 3D
-                const mesh = estantes3D[etq];
-                if(mesh) {
-                    scene.remove(mesh);
-                    delete estantes3D[etq];
-                }
-                
+        function transferir() {
+            const busca = document.getElementById('input-bip').value;
+            const bloco = blocos3D[busca];
+            if(bloco && confirm("Realizar transferência? O local será liberado.")) {
+                scene.remove(bloco);
+                delete blocos3D[busca];
                 document.getElementById('info-produto').classList.add('hidden');
                 document.getElementById('input-bip').value = "";
-                alert("Transferência realizada. Local liberado!");
+                document.getElementById('count-itens').innerText = Object.keys(blocos3D).length;
             }
         }
 
-        function abrirModalRua() { document.getElementById('modal-rua').classList.remove('hidden'); }
-        function fecharModalRua() { document.getElementById('modal-rua').classList.add('hidden'); }
-
-        function salvarNovoLocal() {
-            const novo = {
-                nome: document.getElementById('n-produto').value,
-                rua: Number(document.getElementById('n-rua').value),
-                estante: Number(document.getElementById('n-estante').value),
-                etiqueta: document.getElementById('n-etiqueta').value
-            };
-
-            bancoLogistico.push(novo);
-            localStorage.setItem('dados_log_3d', JSON.stringify(bancoLogistico));
-            criarEstante3D(novo.rua, novo.estante, novo.etiqueta);
-            fecharModalRua();
-            alert("Rua e Produto registrados no Mapa 3D!");
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
         }
 
-        // Inicializa
-        carregarMapa();
-
-        // Ajuste de Janela
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        animate();
     </script>
 </body>
 </html>
