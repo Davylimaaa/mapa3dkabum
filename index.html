@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa 3D Logístico - Lima Store</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Poppins', sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; background: #0f172a; }
+        .ui-panel { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        .btn-kb { background: #ff6500; transition: 0.3s; }
+        .btn-kb:hover { background: #e65c00; transform: scale(1.05); }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div class="fixed top-0 left-0 w-full p-4 flex justify-between items-start z-50 pointer-events-none">
+        <div class="ui-panel p-4 rounded-xl text-white pointer-events-auto">
+            <h1 class="text-xl font-black flex items-center gap-2">
+                <i data-lucide="box" class="text-orange-500"></i> LIMA <span class="text-blue-400">3D LOG</span>
+            </h1>
+            <p class="text-[10px] uppercase tracking-widest opacity-60">Gestão de Endereçamento Tiete</p>
+        </div>
+
+        <div class="flex flex-col gap-2 pointer-events-auto">
+            <button onclick="abrirModalRua()" class="btn-kb text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 shadow-xl">
+                <i data-lucide="plus-circle"></i> REGISTRAR NOVA RUA
+            </button>
+            <div class="ui-panel p-3 rounded-lg text-white text-xs">
+                <p>Botão Esquerdo: Rotacionar</p>
+                <p>Botão Direito: Mover</p>
+                <p>Scroll: Zoom</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="fixed bottom-6 left-6 w-80 ui-panel p-6 rounded-2xl text-white z-50">
+        <h2 class="font-bold mb-4 flex items-center gap-2 border-b border-white/10 pb-2">
+            <i data-lucide="truck"></i> OPERAÇÃO DE COLETA
+        </h2>
+        <div class="space-y-4">
+            <input type="text" id="input-bip" placeholder="Bipar Etiqueta ou SKU..." 
+                   class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none focus:border-orange-500 text-sm">
+            
+            <div id="info-produto" class="hidden animate-pulse">
+                <p class="text-[10px] text-orange-400 font-bold uppercase">Produto Identificado:</p>
+                <p id="nome-item" class="font-bold text-sm">---</p>
+                <p id="local-item" class="text-xs opacity-70">Local: ---</p>
+                
+                <button onclick="realizarTransferencia()" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg mt-4 flex items-center justify-center gap-2 transition">
+                    <i data-lucide="move-right"></i> TRANSFERÊNCIA (SAÍDA)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-rua" class="fixed inset-0 bg-black/70 hidden flex items-center justify-center z-[100] p-4">
+        <div class="bg-slate-900 w-full max-w-md rounded-2xl p-8 border border-white/10 shadow-2xl text-white">
+            <h2 class="text-2xl font-bold mb-6 flex items-center gap-2 italic">
+                <i data-lucide="map" class="text-orange-500"></i> NOVO REGISTRO
+            </h2>
+            <div class="space-y-4">
+                <input type="text" id="n-produto" placeholder="Nome da Mercadoria" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="number" id="n-rua" placeholder="Rua (Ex: 1)" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
+                    <input type="number" id="n-estante" placeholder="Estante (Ex: 5)" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
+                </div>
+                <input type="text" id="n-etiqueta" placeholder="Código da Etiqueta" class="w-full bg-slate-800 border border-slate-700 p-3 rounded-lg outline-none">
+            </div>
+            <div class="mt-8 flex gap-3 text-sm">
+                <button onclick="fecharModalRua()" class="flex-1 bg-slate-700 p-3 rounded-lg font-bold">CANCELAR</button>
+                <button onclick="salvarNovoLocal()" class="flex-1 btn-kb p-3 rounded-lg font-bold">CADASTRAR</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        // --- CONFIGURAÇÃO THREE.JS (MAPA 3D) ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        // Luzes
+        const light = new THREE.AmbientLight(0x404040, 2); scene.add(light);
+        const pointLight = new THREE.PointLight(0xffffff, 1); pointLight.position.set(10, 20, 10); scene.add(pointLight);
+
+        // Chão (Grid)
+        const gridHelper = new THREE.GridHelper(100, 50, 0x444444, 0x222222);
+        scene.add(gridHelper);
+
+        const estantes3D = {}; // Armazena os objetos 3D das estantes
+
+        function criarEstante3D(rua, estante, etiqueta, cor = 0x334155) {
+            const geometry = new THREE.BoxGeometry(1.5, 3, 0.8);
+            const material = new THREE.MeshPhongMaterial({ color: cor });
+            const box = new THREE.Mesh(geometry, material);
+            
+            // Posicionamento baseado na Rua (X) e Estante (Z)
+            box.position.set(rua * 3, 1.5, estante * 2);
+            scene.add(box);
+            
+            // Adiciona borda brilhante
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x64748b }));
+            box.add(line);
+
+            estantes3D[etiqueta] = box;
+        }
+
+        camera.position.set(15, 15, 15);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- LÓGICA DO SISTEMA ---
+        let bancoLogistico = JSON.parse(localStorage.getItem('dados_log_3d') || "[]");
+
+        function carregarMapa() {
+            // Limpa o mapa e recarrega
+            bancoLogistico.forEach(item => {
+                criarEstante3D(item.rua, item.estante, item.etiqueta);
+            });
+        }
+
+        // Bip de Mercadoria
+        document.getElementById('input-bip').addEventListener('input', (e) => {
+            const val = e.target.value;
+            const item = bancoLogistico.find(i => i.etiqueta === val || i.nome === val);
+
+            if(item) {
+                document.getElementById('info-produto').classList.remove('hidden');
+                document.getElementById('nome-item').innerText = item.nome;
+                document.getElementById('local-item').innerText = `Rua ${item.rua} | Estante ${item.estante}`;
+                
+                // Destaca no 3D
+                Object.values(estantes3D).forEach(obj => obj.material.color.setHex(0x334155)); // Reseta todos
+                const mesh = estantes3D[item.etiqueta];
+                if(mesh) {
+                    mesh.material.color.setHex(0xff6500); // Laranja KaBuM
+                    camera.position.set(mesh.position.x + 5, 5, mesh.position.z + 5);
+                    camera.lookAt(mesh.position);
+                }
+            } else {
+                document.getElementById('info-produto').classList.add('hidden');
+            }
+        });
+
+        function realizarTransferencia() {
+            const etq = document.getElementById('input-bip').value;
+            if(confirm("Confirmar transferência? O produto sairá deste local.")) {
+                // Remove do banco
+                bancoLogistico = bancoLogistico.filter(i => i.etiqueta !== etq);
+                localStorage.setItem('dados_log_3d', JSON.stringify(bancoLogistico));
+                
+                // Remove do 3D
+                const mesh = estantes3D[etq];
+                if(mesh) {
+                    scene.remove(mesh);
+                    delete estantes3D[etq];
+                }
+                
+                document.getElementById('info-produto').classList.add('hidden');
+                document.getElementById('input-bip').value = "";
+                alert("Transferência realizada. Local liberado!");
+            }
+        }
+
+        function abrirModalRua() { document.getElementById('modal-rua').classList.remove('hidden'); }
+        function fecharModalRua() { document.getElementById('modal-rua').classList.add('hidden'); }
+
+        function salvarNovoLocal() {
+            const novo = {
+                nome: document.getElementById('n-produto').value,
+                rua: Number(document.getElementById('n-rua').value),
+                estante: Number(document.getElementById('n-estante').value),
+                etiqueta: document.getElementById('n-etiqueta').value
+            };
+
+            bancoLogistico.push(novo);
+            localStorage.setItem('dados_log_3d', JSON.stringify(bancoLogistico));
+            criarEstante3D(novo.rua, novo.estante, novo.etiqueta);
+            fecharModalRua();
+            alert("Rua e Produto registrados no Mapa 3D!");
+        }
+
+        // Inicializa
+        carregarMapa();
+
+        // Ajuste de Janela
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
