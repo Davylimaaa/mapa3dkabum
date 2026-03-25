@@ -92,7 +92,9 @@
         <div class="glass p-6 rounded-3xl w-80 space-y-4">
             <h3 class="text-white font-bold text-lg uppercase">Inserir Item Manual</h3>
             <input type="text" id="input-etiqueta" placeholder="Etiqueta (ex: 123456)" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
-            <input type="text" id="input-prateleira" placeholder="Prateleira (ex: 185674)" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+            <select id="select-prateleira" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+                <option value="">Selecione uma prateleira...</option>
+            </select>
             <div class="flex gap-2">
                 <button onclick="inserirItem()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl">Inserir</button>
                 <button onclick="fecharModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
@@ -427,8 +429,77 @@
     }
 
     function mostrarInserirItem() {
+        carregarPrateleirasDisponiveis();
         document.getElementById('modal-inserir').classList.remove('hidden');
         document.getElementById('input-etiqueta').focus();
+    }
+
+    function fecharModal() {
+        document.getElementById('modal-inserir').classList.add('hidden');
+        document.getElementById('input-etiqueta').value = '';
+        document.getElementById('select-prateleira').value = '';
+    }
+
+    async function carregarPrateleirasDisponiveis() {
+        try {
+            const select = document.getElementById('select-prateleira');
+            select.innerHTML = '<option value="">Carregando...</option>';
+
+            // Busca todas as prateleiras únicas do banco
+            const querySnapshot = await window.firebaseDB.collection('estoque').get();
+            const prateleirasSet = new Set();
+
+            // Adiciona prateleiras já usadas
+            querySnapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data.prateleira) prateleirasSet.add(data.prateleira);
+            });
+
+            // Adiciona prateleiras e cofres do mapa (hardcoded para garantir)
+            const mapaPrateleiras = [
+                // Prateleiras esquerda
+                ...Array.from({length: 5}, (_, i) => [
+                    185674+i*4, 185675+i*4, 185676+i*4, 185677+i*4
+                ]).flat(),
+                ...Array.from({length: 6}, (_, i) => [
+                    185650+i*4, 185651+i*4, 185652+i*4, 185653+i*4
+                ]).flat(),
+                ...Array.from({length: 6}, (_, i) => [
+                    185626+i*4, 185627+i*4, 185628+i*4, 185629+i*4
+                ]).flat(),
+                // Rodapé
+                185601, 185602, 185603, 185604, 185605, 185606, 185607, 185608,
+                185610, 185611, 185612, 185613, 185615, 185616, 185617, 185618,
+                185619, 185620, 185621, 185622, 185623, 185624, 185625,
+                // Direita
+                185700, 202669, 202670, 202671, 185697, 185698, 185699, 202677,
+                185694, 185695, 185696, 202678,
+                // Cofres
+                202682, 202681, 202680, 202679, 202683,
+                // Centro
+                202672, 202673, 202674, 202675, 202676,
+                // Acima dos cofres
+                185609, 185614
+            ];
+
+            mapaPrateleiras.forEach(p => prateleirasSet.add(String(p)));
+
+            // Ordena e cria options
+            const prateleirasOrdenadas = Array.from(prateleirasSet).sort();
+            select.innerHTML = '<option value="">Selecione uma prateleira...</option>';
+            prateleirasOrdenadas.forEach(prat => {
+                const option = document.createElement('option');
+                option.value = prat;
+                option.textContent = prat;
+                select.appendChild(option);
+            });
+
+        } catch (error) {
+            console.error('Erro ao carregar prateleiras:', error);
+            // Fallback com algumas prateleiras
+            const select = document.getElementById('select-prateleira');
+            select.innerHTML = '<option value="">Erro ao carregar</option><option value="185674">185674</option>';
+        }
     }
 
     async function testarFirebase() {
@@ -447,10 +518,10 @@
 
     async function inserirItem() {
         const etiqueta = document.getElementById('input-etiqueta').value.trim();
-        const prateleira = document.getElementById('input-prateleira').value.trim();
+        const prateleira = document.getElementById('select-prateleira').value;
 
         if (!etiqueta || !prateleira) {
-            alert("Preencha etiqueta e prateleira!");
+            alert("Preencha etiqueta e selecione uma prateleira!");
             return;
         }
 
@@ -476,7 +547,7 @@
             atualizarContador();
         } catch (error) {
             console.error("Erro ao inserir item:", error);
-            alert("Erro ao salvar no servidor. Tente novamente.");
+            alert("Erro ao salvar no servidor. Verifique a conexão com Firebase.");
         }
     }
 
