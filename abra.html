@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIMA LOG 2D - Operação Tiete</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { margin: 0; background: #020617; font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        #map-section { flex: 1; background: #020617; display: flex; align-items: center; justify-content: center; border-right: 1px solid rgba(255,255,255,0.1); }
+        #control-panel { width: 400px; background: #0f172a; padding: 30px; display: flex; flex-direction: column; gap: 24px; z-index: 50; box-shadow: -10px 0 30px rgba(0,0,0,0.5); }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        canvas { display: block; max-width: 100%; max-height: 100%; }
+    </style>
+</head>
+<body>
+
+    <div id="map-section">
+        <canvas id="log-canvas"></canvas>
+    </div>
+
+    <div id="control-panel">
+        <div>
+            <h1 class="text-[#ff6500] font-black italic text-4xl tracking-tighter uppercase leading-none">Lima</h1>
+            <h2 class="text-blue-500 text-xs font-bold tracking-[0.3em] mt-1 uppercase">Logística Oficial</h2>
+        </div>
+
+        <div class="glass p-6 rounded-[2rem] space-y-4">
+            <label class="block text-[10px] font-black text-slate-500 uppercase tracking-widest">Aguardando Bip...</label>
+            <input type="text" id="input-bip" placeholder="Escaneie a Etiqueta..." 
+                   class="w-full bg-slate-900 border border-slate-700 p-5 rounded-2xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg transition shadow-inner">
+        </div>
+
+        <div id="info-item" class="hidden glass p-6 rounded-[2rem] border-l-8 border-[#ff6500] animate-in fade-in slide-in-from-right-8 duration-300">
+            <p class="font-bold text-[11px] uppercase mb-3 text-slate-400">Localização Identificada:</p>
+            <div class="bg-blue-600/20 p-6 rounded-2xl text-center border border-blue-500/30 mb-6">
+                <span class="text-[10px] font-black text-blue-400 block uppercase mb-2 tracking-widest">Nicho / Prateleira</span>
+                <b id="est-v" class="text-white text-5xl font-mono tracking-tighter">--</b>
+            </div>
+            <button onclick="transferir()" class="w-full bg-red-600 text-white font-black py-5 rounded-2xl text-xs uppercase hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center gap-3 shadow-lg">
+                <i data-lucide="log-out" class="w-4"></i> Realizar Baixa
+            </button>
+        </div>
+
+        <div class="mt-auto space-y-4">
+            <label class="w-full glass px-6 py-5 rounded-2xl cursor-pointer text-white font-bold text-sm flex items-center justify-center gap-3 hover:bg-white/10 transition border-dashed border-2 border-slate-600 group">
+                <i data-lucide="upload" class="text-blue-500 group-hover:scale-125 transition"></i> SINCRONIZAR EXCEL
+                <input type="file" id="up-excel" hidden onchange="syncExcel(event)">
+            </label>
+            <div class="text-center text-[9px] text-slate-600 font-bold uppercase tracking-[0.2em]">
+                Lima Store &copy; 2026 - Tiete Hub
+            </div>
+        </div>
+    </div>
+
+    <script>
+    lucide.createIcons();
+
+    const canvas = document.getElementById('log-canvas');
+    const ctx = canvas.getContext('2d');
+    const mapSection = document.getElementById('map-section');
+
+    let estoqueCache = [];
+    let alvoID = null;
+    
+    // Configurações do Mapa Fixo (Sem Zoom/Sem Arraste)
+    let camera = { x: 40, y: 40, zoom: 0.65 };
+
+    const plantaLogistica = {
+
+        // Estantes Horizontais (Top e Centro)
+
+        estantes: [
+
+            // Bloco Superior (Fileira 185674...)
+
+            { x: 50, y: 50, ids: [185674, 185675, 185676, 185677] },
+
+            { x: 160, y: 50, ids: [185678, 185679, 185680, 185681] },
+
+            { x: 270, y: 50, ids: [185682, 185683, 185684, 185685] },
+
+            { x: 380, y: 50, ids: [185686, 185687, 185688, 185689] },
+
+            { x: 490, y: 50, ids: [185690, 185691, 185692, 185693] },
+
+
+
+            // Bloco Central Superior (Fileira 185650...)
+
+            { x: 50, y: 350, ids: [185650, 185651, 185652, 185653] },
+
+            { x: 160, y: 350, ids: [185654, 185655, 185656, 185657] },
+
+            { x: 270, y: 350, ids: [185658, 185659, 185660, 185661] },
+
+            { x: 380, y: 350, ids: [185662, 185663, 185664, 185665] },
+
+            { x: 490, y: 350, ids: [185666, 185667, 185668, 185669] },
+
+            { x: 600, y: 350, ids: [185670, 185671, 185672, 185673] },
+
+
+
+            // Bloco Central Inferior (Fileira 185626...)
+
+            { x: 50, y: 550, ids: [185626, 185627, 185628, 185629] },
+
+            { x: 160, y: 550, ids: [185630, 185631, 185632, 185633] },
+
+            { x: 270, y: 550, ids: [185634, 185635, 185636, 185637] },
+
+            { x: 380, y: 550, ids: [185638, 185639, 185640, 185641] },
+
+            { x: 490, y: 550, ids: [185642, 185643, 185644, 185645] },
+
+            { x: 600, y: 550, ids: [185646, 185647, 185648, 185649] },
+
+
+
+            // Bloco Rodapé (Esquerda)
+
+            { x: 50, y: 850, ids: [185601, 185602, 185603, 185604] },
+
+            { x: 160, y: 850, ids: [185605, 185606, 185607, 185608] },
+
+            { x: 380, y: 850, ids: [185610, 185611, 185612, 185613] },
+
+            { x: 600, y: 850, ids: [185615, 185616, 185617, 185618] },
+
+            { x: 710, y: 850, ids: [185619, 185620, 185621] },
+
+            { x: 820, y: 850, ids: [185622, 185623, 185624, 185625] },
+
+
+
+            // Estantes Isoladas (Perto da porta)
+
+            { x: 710, y: 390, ids: [202672, 202673], vertical: true },
+
+            { x: 710, y: 560, ids: [202674, 202675], vertical: true },
+
+        ],
+
+        // Estantes Verticais (Lado Direito)
+
+        estantesV: [
+
+            { x: 900, y: 50, ids: [202671, 202670, 202669, 185700], rot: 90 },
+
+            { x: 900, y: 200, ids: [202677, 185699, 185698, 185697], rot: 90 },
+
+            { x: 900, y: 400, ids: [202678, 185696, 185695, 185694], rot: 90 },
+
+        ],
+
+        // Objetos Especiais (Cofres e Mesas)
+
+        objetos: [
+
+            { x: 650, y: 50, w: 120, h: 80, tipo: 'mesa', label: 'Escritório' },
+
+            { x: 285, y: 885, w: 70, h: 100, tipo: 'cofre', id: 202682 },
+
+            { x: 505, y: 885, w: 70, h: 100, tipo: 'cofre', id: 202681 },
+
+            { x: 710, y: 925, w: 80, h: 60, tipo: 'cofre', id: 202680 },
+
+            { x: 935, y: 885, w: 80, h: 100, tipo: 'cofre', id: 202679, labelTop: '202683' },
+
+            { x: 720, y: 480, w: 40, h: 70, tipo: 'bloco', id: 202676 }
+
+        ]
+
+    };
+
+    function resize() {
+        canvas.width = mapSection.clientWidth;
+        canvas.height = mapSection.clientHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function desenhar() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(camera.x, camera.y);
+        ctx.scale(camera.zoom, camera.zoom);
+
+        // LINHA DA PORTA
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(880, 20); ctx.lineTo(880, 180); ctx.stroke();
+
+        const drawNicho = (x, y, id, w = 100, h = 35) => {
+            const isTarget = alvoID === String(id);
+            ctx.fillStyle = isTarget ? '#ff6500' : '#1e293b';
+            ctx.strokeStyle = isTarget ? '#fff' : '#475569';
+            ctx.lineWidth = isTarget ? 3 : 1;
+            
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = isTarget ? '#fff' : '#94a3b8';
+            ctx.font = 'bold 14px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText(id, x + w / 2, y + h / 2 + 5);
+        };
+
+        plantaLogistica.estantes.forEach(est => {
+            est.ids.forEach((id, i) => {
+                const sp = est.horizontal ? 105 : 38;
+                if(est.horizontal) drawNicho(est.x + (i*sp), est.y, id, 100, 35);
+                else drawNicho(est.x, est.y + (i * sp), id, 100, 35);
+            });
+        });
+
+        plantaLogistica.estantesV.forEach(est => {
+            est.ids.forEach((id, i) => { drawNicho(est.x + (i * 38), est.y, id, 35, 100); });
+        });
+
+        plantaLogistica.objetos.forEach(obj => {
+            const isTarget = alvoID === String(obj.id);
+            ctx.fillStyle = isTarget ? '#ff6500' : '#334155';
+            ctx.beginPath(); ctx.roundRect(obj.x, obj.y, obj.w, obj.h, 6); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center';
+            if(obj.id) { ctx.fillText(obj.id, obj.x + obj.w/2, obj.y + obj.h/2 + 5); }
+            else { ctx.fillText(obj.label || '', obj.x + obj.w/2, obj.y + obj.h/2 + 5); }
+        });
+
+        ctx.restore();
+        requestAnimationFrame(desenhar);
+    }
+
+    function syncExcel(e) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const wb = XLSX.read(ev.target.result, {type: 'array'});
+            estoqueCache = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            alert("Planta Atualizada!");
+        };
+        reader.readAsArrayBuffer(e.target.files[0]);
+    }
+
+    document.getElementById('input-bip').addEventListener('input', (e) => {
+        const val = e.target.value;
+        const p = estoqueCache.find(i => String(i.etiqueta) === val);
+        if(p) {
+            alvoID = String(p.prateleira);
+            document.getElementById('info-item').classList.remove('hidden');
+            document.getElementById('est-v').innerText = p.prateleira;
+        } else {
+            alvoID = null;
+            document.getElementById('info-item').classList.add('hidden');
+        }
+    });
+
+    function transferir() {
+        const bip = document.getElementById('input-bip').value;
+        if(confirm("Confirmar saída do produto?")) {
+            estoqueCache = estoqueCache.filter(i => String(i.etiqueta) !== bip);
+            document.getElementById('info-item').classList.add('hidden');
+            document.getElementById('input-bip').value = "";
+            alvoID = null;
+        }
+    }
+
+    desenhar();
+    </script>
+</body>
+</html>
