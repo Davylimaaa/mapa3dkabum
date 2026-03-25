@@ -7,6 +7,29 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-analytics-compat.js"></script>
+    <script>
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDBN3xdbowCllOR4d82LZsy-8BTfSLGIxU",
+            authDomain: "limaestoquekbm.firebaseapp.com",
+            projectId: "limaestoquekbm",
+            storageBucket: "limaestoquekbm.firebasestorage.app",
+            messagingSenderId: "453423494653",
+            appId: "1:453423494653:web:6a3a443994071f3f7ad594",
+            measurementId: "G-YW2ETK9GBS"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        firebase.analytics();
+        const db = firebase.firestore();
+
+        window.firebaseDB = db;
+    </script>
     <style>
         body { margin: 0; background: #020617; font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; color: white; }
         #map-section { flex: 1; background: #020617; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
@@ -52,9 +75,27 @@
                 <i data-lucide="file-up" class="w-4 text-green-500"></i> IMPORTAR EXCEL (DB)
                 <input type="file" id="up-excel" hidden onchange="syncExcel(event)">
             </label>
+            <button onclick="mostrarInserirItem()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
+                <i data-lucide="plus" class="w-4 text-blue-500"></i> INSERIR ITEM MANUAL
+            </button>
+            <button onclick="testarFirebase()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
+                <i data-lucide="zap" class="w-4 text-yellow-500"></i> TESTAR CONEXÃO FIREBASE
+            </button>
             <div class="flex justify-between items-center px-2">
                 <p id="status-db" class="text-[8px] text-slate-500 uppercase font-bold">Base de dados vazia</p>
                 <p class="text-[8px] text-slate-600 uppercase font-bold">v8.2 FINAL</p>
+        </div>
+    </div>
+
+    <!-- Modal para Inserir Item -->
+    <div id="modal-inserir" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-80 space-y-4">
+            <h3 class="text-white font-bold text-lg uppercase">Inserir Item Manual</h3>
+            <input type="text" id="input-etiqueta" placeholder="Etiqueta (ex: 123456)" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+            <input type="text" id="input-prateleira" placeholder="Prateleira (ex: 185674)" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+            <div class="flex gap-2">
+                <button onclick="inserirItem()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl">Inserir</button>
+                <button onclick="fecharModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
             </div>
         </div>
     </div>
@@ -68,6 +109,23 @@
     let estoqueCache = [];
     let alvoID = null;
     let etiquetaAtual = null;
+
+    // Carregar dados do Firebase
+    async function carregarEstoque() {
+        try {
+            console.log('Tentando conectar ao Firebase...');
+            const querySnapshot = await window.firebaseDB.collection('estoque').get();
+            estoqueCache = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            console.log('Estoque carregado:', estoqueCache);
+            atualizarContador();
+        } catch (error) {
+            console.error("Erro ao carregar estoque:", error);
+            alert("Erro ao conectar com o servidor. Verifique as regras do Firestore.");
+            // Fallback para localStorage se Firebase falhar
+            estoqueCache = JSON.parse(localStorage.getItem('estoqueCache')) || [];
+            atualizarContador();
+        }
+    }
 
     // Proporção do Mapa
     const BASE_W = 1250;
@@ -279,39 +337,87 @@
     });
 
     // FUNÇÃO DE BAIXA (ATUALIZAÇÃO DO SISTEMA)
-    function realizarBaixa() {
+    async function realizarBaixa() {
         if(!etiquetaAtual) return;
 
-        // Remove do cache
-        estoqueCache = estoqueCache.filter(i => String(i.etiqueta) !== etiquetaAtual);
+        try {
+            // Remove do Firebase
+            const querySnapshot = await window.firebaseDB.collection('estoque').where('etiqueta', '==', etiquetaAtual).get();
+            querySnapshot.forEach(async (document) => {
+                await window.firebaseDB.collection('estoque').doc(document.id).delete();
+            });
 
-        // Salva no localStorage para persistência e auditoria
-        localStorage.setItem('estoqueCache', JSON.stringify(estoqueCache));
-        localStorage.setItem('ultimaBaixa', JSON.stringify({ etiqueta: etiquetaAtual, prateleira: alvoID, data: new Date().toISOString() }));
+            // Remove do cache local
+            estoqueCache = estoqueCache.filter(i => String(i.etiqueta) !== etiquetaAtual);
 
-        // Reseta interface
-        alert("✅ BAIXA REALIZADA: Etiqueta " + etiquetaAtual + " removida do estoque.");
+            // Salva no localStorage como backup
+            localStorage.setItem('estoqueCache', JSON.stringify(estoqueCache));
+            localStorage.setItem('ultimaBaixa', JSON.stringify({ etiqueta: etiquetaAtual, prateleira: alvoID, data: new Date().toISOString() }));
 
-        etiquetaAtual = null;
-        alvoID = null;
-        document.getElementById('input-bip').value = '';
-        document.getElementById('info-item').classList.add('hidden');
-        document.getElementById('input-bip').focus();
+            // Reseta interface
+            alert("✅ BAIXA REALIZADA: Etiqueta " + etiquetaAtual + " removida do estoque.");
 
-        atualizarContador();
+            etiquetaAtual = null;
+            alvoID = null;
+            document.getElementById('input-bip').value = '';
+            document.getElementById('info-item').classList.add('hidden');
+            document.getElementById('input-bip').focus();
 
-        // Redireciona para o sistema Kabum após a baixa
-        window.location.href = "https://manager.kabum.com.br/cgi-local/expedicao/armazenagem/coletor/sku_setar.cgi?msg=1&erros=";
+            atualizarContador();
+
+            // Redireciona para o sistema Kabum após a baixa
+            window.location.href = "https://manager.kabum.com.br/cgi-local/expedicao/armazenagem/coletor/sku_setar.cgi?msg=1&erros=";
+        } catch (error) {
+            console.error("Erro ao realizar baixa:", error);
+            alert("Erro ao remover do servidor. Tente novamente.");
+        }
     }
 
-    function syncExcel(e) {
+    async function syncExcel(e) {
         const reader = new FileReader();
-        reader.onload = (ev) => {
-            const data = new Uint8Array(ev.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            estoqueCache = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-            atualizarContador();
-            alert("✅ Sistema Sincronizado com o Excel!");
+        reader.onload = async (ev) => {
+            try {
+                const data = new Uint8Array(ev.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const novosItens = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+                console.log('Itens da planilha:', novosItens); // Debug
+
+                if (novosItens.length === 0) {
+                    alert("Planilha vazia ou sem dados válidos!");
+                    return;
+                }
+
+                // Verifica se tem as colunas necessárias
+                const primeiroItem = novosItens[0];
+                if (!primeiroItem.etiqueta || !primeiroItem.prateleira) {
+                    alert("Planilha deve ter colunas 'etiqueta' e 'prateleira'!");
+                    return;
+                }
+
+                // Adiciona ao Firebase
+                let adicionados = 0;
+                for (const item of novosItens) {
+                    try {
+                        await window.firebaseDB.collection('estoque').add({
+                            etiqueta: String(item.etiqueta),
+                            prateleira: String(item.prateleira),
+                            dataInsercao: new Date().toISOString()
+                        });
+                        adicionados++;
+                    } catch (itemError) {
+                        console.error('Erro ao adicionar item:', item, itemError);
+                    }
+                }
+
+                // Atualiza cache local
+                estoqueCache = [...estoqueCache, ...novosItens];
+                atualizarContador();
+                alert(`✅ Sistema Sincronizado! ${adicionados} itens adicionados.`);
+            } catch (error) {
+                console.error("Erro ao sincronizar Excel:", error);
+                alert("Erro ao salvar no servidor. Verifique o console para detalhes.");
+            }
         };
         reader.readAsArrayBuffer(e.target.files[0]);
     }
@@ -320,7 +426,62 @@
         document.getElementById('status-db').innerText = estoqueCache.length + " Itens em estoque";
     }
 
+    function mostrarInserirItem() {
+        document.getElementById('modal-inserir').classList.remove('hidden');
+        document.getElementById('input-etiqueta').focus();
+    }
+
+    async function testarFirebase() {
+        try {
+            console.log('Testando Firebase...');
+            await window.firebaseDB.collection('teste').add({
+                mensagem: 'Teste de conexão',
+                timestamp: new Date().toISOString()
+            });
+            alert('✅ Firebase conectado! Dados podem ser salvos.');
+        } catch (error) {
+            console.error('Erro no teste Firebase:', error);
+            alert('❌ Erro na conexão com Firebase. Verifique as regras.');
+        }
+    }
+
+    async function inserirItem() {
+        const etiqueta = document.getElementById('input-etiqueta').value.trim();
+        const prateleira = document.getElementById('input-prateleira').value.trim();
+
+        if (!etiqueta || !prateleira) {
+            alert("Preencha etiqueta e prateleira!");
+            return;
+        }
+
+        // Verifica se já existe
+        if (estoqueCache.find(i => String(i.etiqueta) === etiqueta)) {
+            alert("Etiqueta já existe!");
+            return;
+        }
+
+        try {
+            // Adiciona ao Firebase
+            await window.firebaseDB.collection('estoque').add({
+                etiqueta: etiqueta,
+                prateleira: prateleira,
+                dataInsercao: new Date().toISOString()
+            });
+
+            // Adiciona ao cache local
+            estoqueCache.push({ etiqueta: etiqueta, prateleira: prateleira });
+
+            alert("✅ Item inserido: " + etiqueta + " na prateleira " + prateleira);
+            fecharModal();
+            atualizarContador();
+        } catch (error) {
+            console.error("Erro ao inserir item:", error);
+            alert("Erro ao salvar no servidor. Tente novamente.");
+        }
+    }
+
     render();
+    carregarEstoque();
     </script>
 </body>
 </html>
