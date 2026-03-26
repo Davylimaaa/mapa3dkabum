@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/qr-scanner/qr-scanner.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -32,7 +34,7 @@
     </script>
     <style>
         body { margin: 0; background: #020617; font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; color: white; }
-        #map-section { flex: 1; background: #020617; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+        #map-section { flex: 1; background: #020617; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; min-width: 0; }
         #log-canvas { max-width: 100%; max-height: 100%; }
         #control-panel { width: 360px; background: #0f172a; padding: 25px; display: flex; flex-direction: column; gap: 20px; z-index: 50; border-left: 1px solid rgba(255,255,255,0.1); box-shadow: -10px 0 30px rgba(0,0,0,0.5); overflow-y: auto; }
         #max-map-btn { position: absolute; top: 12px; right: 12px; z-index: 20; }
@@ -41,6 +43,16 @@
         canvas { border-radius: 12px; cursor: crosshair; }
         .btn-baixa { background: linear-gradient(to right, #dc2626, #991b1b); transition: all 0.3s ease; }
         .btn-baixa:hover { transform: scale(1.02); filter: brightness(1.2); }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            #map-section { height: calc(100vh - 340px); width: 100%; }
+            #control-panel { width: 100%; height: 340px; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); box-shadow: 0 -10px 30px rgba(0,0,0,0.5); }
+            #control-panel .glass { padding: 12px; }
+            #status-db { font-size: 9px; }
+        }
+
+        .qr-btn { position: absolute; right: 10px; top: 38px; z-index: 15; }
     </style>
 </head>
 <body>
@@ -58,10 +70,13 @@
         <div id="user-info" class="glass p-3 rounded-xl mb-4">
             <div class="text-white/50 text-xs">Não logado</div>
         </div>
-        <div class="glass p-5 rounded-3xl space-y-3">
+        <div class="glass p-5 rounded-3xl space-y-3 relative">
             <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Aguardando Scanner...</label>
             <input type="text" id="input-bip" autofocus placeholder="Bipe a Etiqueta..." 
                    class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg transition shadow-inner">
+            <button type="button" onclick="abrirScannerQRCode()" title="Abrir câmera para ler QR" class="qr-btn glass rounded-full p-2">
+                <i data-lucide="qr-code" class="w-4 h-4 text-white"></i>
+            </button>
         </div>
 
         <div id="info-item" class="hidden glass p-5 rounded-3xl border-l-8 border-[#ff6500] animate-in fade-in zoom-in duration-300">
@@ -96,11 +111,31 @@
         </div>
     </div>
 
+    <!-- Modal para Leitura de QR Code -->
+    <div id="modal-qrcode" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-4 rounded-3xl w-[92vw] max-w-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-white font-bold text-base uppercase">Escanear QR/Barcode</h3>
+                <div class="flex gap-2">
+                    <button onclick="fecharScannerQRCode()" class="text-white text-sm">Fechar</button>
+                    <button onclick="cancelarScanner()" class="text-white text-sm">Cancelar</button>
+                </div>
+            </div>
+            <video id="qr-video" class="w-full h-[320px] bg-black rounded-xl" muted playsinline></video>
+            <p id="qr-status" class="text-white text-xs mt-2">Aponte a câmera para o QR Code.</p>
+        </div>
+    </div>
+
     <!-- Modal para Inserir Item -->
     <div id="modal-inserir" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
         <div class="glass p-6 rounded-3xl w-80 space-y-4">
             <h3 class="text-white font-bold text-lg uppercase">Inserir Item Manual</h3>
-            <input type="text" id="input-etiqueta" placeholder="Etiqueta (ex: 123456)" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+            <div class="flex items-center gap-2">
+                <input type="text" id="input-etiqueta" placeholder="Etiqueta (ex: 123456)" class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
+                <button type="button" onclick="abrirScannerEtq()" title="Ler código de barras/QR" class="glass p-2 rounded-xl">
+                    <i data-lucide="camera" class="w-4 h-4 text-white"></i>
+                </button>
+            </div>
             <select id="select-prateleira" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
                 <option value="">Selecione uma prateleira...</option>
             </select>
@@ -799,6 +834,143 @@
         document.getElementById('search-container').classList.add('hidden');
         document.getElementById('search-etiqueta').value = '';
         document.getElementById('filtered-content').innerHTML = '';
+    }
+
+    let qrScanner = null;
+    let scanTarget = 'input-bip';
+    let scanTipo = 'qr';
+
+    function abrirScannerQRCode() {
+        scanTarget = 'input-bip';
+        scanTipo = 'qr';
+        iniciarScanner('Escaneie etiqueta para busca', 'qr');
+    }
+
+    function abrirScannerEtq() {
+        scanTarget = 'input-etiqueta';
+        scanTipo = 'barcode';
+        iniciarScanner('Escaneie etiqueta para registro de item', 'barcode');
+    }
+
+    function iniciarScanner(mensagem, tipo = 'qr') {
+        document.getElementById('modal-qrcode').classList.remove('hidden');
+        const video = document.getElementById('qr-video');
+        const status = document.getElementById('qr-status');
+        status.textContent = mensagem;
+
+        pararScanner();
+
+        if (tipo === 'qr') {
+            if (typeof QrScanner === 'undefined') {
+                alert('Biblioteca de leitura QR não disponível.');
+                return;
+            }
+
+            qrScanner = new QrScanner(video, result => {
+                status.textContent = `Código lido: ${result}`;
+                aplicarResultado(result);
+            }, {
+                onDecodeError: error => {
+                    status.textContent = 'Aguardando leitura...';
+                },
+                highlightScanRegion: true
+            });
+
+            qrScanner.start().catch(err => {
+                status.textContent = 'Erro ao acessar câmera: ' + err;
+            });
+        } else if (tipo === 'barcode') {
+            if (typeof Quagga === 'undefined') {
+                alert('Biblioteca de leitura de códigos de barras não disponível.');
+                return;
+            }
+
+            Quagga.init({
+                inputStream: {
+                    name: 'Live',
+                    type: 'LiveStream',
+                    target: video,
+                    constraints: {
+                        facingMode: 'environment'
+                    }
+                },
+                decoder: {
+                    readers: [
+                        'code_128_reader',
+                        'ean_reader',
+                        'ean_8_reader',
+                        'code_39_reader',
+                        'upc_reader',
+                        'upc_e_reader'
+                    ]
+                },
+                locate: true
+            }, err => {
+                if (err) {
+                    status.textContent = 'Erro Quagga: ' + err;
+                    return;
+                }
+                Quagga.start();
+            });
+
+            Quagga.onDetected(data => {
+                const result = data.codeResult ? data.codeResult.code : null;
+                if (result) {
+                    status.textContent = `Código lido: ${result}`;
+                    aplicarResultado(result);
+                }
+            });
+
+            Quagga.onProcessed(() => {
+                // Manter status enquanto busca
+            });
+        }
+    }
+
+    function aplicarResultado(result) {
+        const targetInput = document.getElementById(scanTarget);
+        if (targetInput) {
+            targetInput.value = result;
+            targetInput.dispatchEvent(new Event('input'));
+        }
+
+        if (scanTarget === 'input-bip') {
+            fecharScannerQRCode();
+        } else {
+            fecharScannerQRCode();
+            document.getElementById('modal-inserir').classList.remove('hidden');
+            document.getElementById('input-etiqueta').focus();
+        }
+    }
+
+    function pararScanner() {
+        if (qrScanner) {
+            qrScanner.stop();
+            qrScanner.destroy();
+            qrScanner = null;
+        }
+        if (typeof Quagga !== 'undefined' && Quagga.running) {
+            Quagga.stop();
+        }
+    }
+
+    function fecharScannerQRCode() {
+        pararScanner();
+        document.getElementById('modal-qrcode').classList.add('hidden');
+    }
+
+    function cancelarScanner() {
+        pararScanner();
+        document.getElementById('modal-qrcode').classList.add('hidden');
+    }
+
+    function fecharScannerQRCode() {
+        if (qrScanner) {
+            qrScanner.stop();
+            qrScanner.destroy();
+            qrScanner = null;
+        }
+        document.getElementById('modal-qrcode').classList.add('hidden');
     }
 
     async function exportarExcelRelatorio() {
