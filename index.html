@@ -45,10 +45,11 @@
 
         @media (max-width: 900px) {
             body { flex-direction: column; }
-            #map-section { height: calc(100vh - 340px); width: 100%; }
-            #control-panel { width: 100%; height: 340px; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); box-shadow: 0 -10px 30px rgba(0,0,0,0.5); }
+            #map-section { height: 50vh; width: 100%; touch-action: none; }
+            #control-panel { width: 100%; flex: 1; border-left: none; border-top: 1px solid rgba(255,255,255,0.1); box-shadow: 0 -10px 30px rgba(0,0,0,0.5); overflow-y: auto; }
             #control-panel .glass { padding: 12px; }
             #status-db { font-size: 9px; }
+            #log-canvas { touch-action: none; }
         }
 
         .qr-btn { position: absolute; right: 10px; top: 38px; z-index: 15; }
@@ -64,7 +65,7 @@
 
     <div id="control-panel">
         <div class="mb-2">
-            <h1 class="text-[#ff6500] font-black italic text-4xl tracking-tighter uppercase leading-none">KABUM<h1></h1>
+            <h1 class="text-[#ff6500] font-black italic text-4xl tracking-tighter uppercase leading-none">KABUM</h1>
             <h2 class="text-blue-500 text-[10px] font-bold tracking-[0.3em] mt-1 uppercase">Logística Oficial</h2>
         </div>
         <div id="user-info" class="glass p-3 rounded-xl mb-4">
@@ -108,6 +109,7 @@
             <div class="flex justify-between items-center px-2">
                 <p id="status-db" class="text-[8px] text-slate-500 uppercase font-bold">Base de dados vazia</p>
                 <p class="text-[8px] text-slate-600 uppercase font-bold">v8.2 FINAL</p>
+            </div>
         </div>
     </div>
 
@@ -116,10 +118,7 @@
         <div class="glass p-4 rounded-3xl w-[92vw] max-w-lg">
             <div class="flex justify-between items-center mb-3">
                 <h3 class="text-white font-bold text-base uppercase">Escanear QR/Barcode</h3>
-                <div class="flex gap-2">
-                    <button onclick="fecharScannerQRCode()" class="text-white text-sm">Fechar</button>
-                    <button onclick="cancelarScanner()" class="text-white text-sm">Cancelar</button>
-                </div>
+                <button onclick="cancelarScanner()" class="text-white text-sm bg-red-600/50 px-3 py-1 rounded-lg">Fechar</button>
             </div>
             <div id="qr-video-container" class="w-full h-[320px] bg-black rounded-xl overflow-hidden"></div>
             <p id="qr-status" class="text-white text-xs mt-2">Aponte a câmera para o QR Code.</p>
@@ -133,8 +132,13 @@
             <p id="inserir-status" class="text-green-400 text-xs font-bold hidden"></p>
             <div>
                 <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">1° Bipe a Prateleira (Rua)</label>
-                <input type="text" id="input-prateleira" placeholder="Bipe ou digite a prateleira..." 
-                       class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg">
+                <div class="flex items-center gap-2">
+                    <input type="text" id="input-prateleira" placeholder="Bipe ou digite a prateleira..." 
+                           class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg">
+                    <button type="button" onclick="abrirScannerPrat()" title="Ler prateleira por QR/Barcode" class="glass p-2 rounded-xl">
+                        <i data-lucide="camera" class="w-4 h-4 text-white"></i>
+                    </button>
+                </div>
                 <p id="prateleira-ok" class="text-green-400 text-[10px] font-bold mt-1 hidden"></p>
             </div>
             <div>
@@ -198,7 +202,7 @@
                        class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold senha-mask">
             </div>
             
-            <button onclick="fazerLogin()" class="w-full bg-[#ff6500] hover:bg-[#e55a00] text-white font-black py-4 rounded-xl text-lg uppercase">
+            <button id="btn-login" onclick="fazerLogin()" class="w-full bg-[#ff6500] hover:bg-[#e55a00] text-white font-black py-4 rounded-xl text-lg uppercase">
                 Entrar
             </button>
             
@@ -308,6 +312,70 @@
         canvas.style.cursor = 'grab';
     });
 
+    // === TOUCH EVENTS PARA CELULAR ===
+    let lastTouchX = 0;
+    let lastTouchY = 0;
+    let lastPinchDist = 0;
+    let isTouching = false;
+
+    function getTouchDist(touches) {
+        const dx = touches[0].clientX - touches[1].clientX;
+        const dy = touches[0].clientY - touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            isTouching = true;
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+            lastPinchDist = getTouchDist(e.touches);
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1 && isTouching) {
+            const deltaX = e.touches[0].clientX - lastTouchX;
+            const deltaY = e.touches[0].clientY - lastTouchY;
+            panX += deltaX;
+            panY += deltaY;
+            lastTouchX = e.touches[0].clientX;
+            lastTouchY = e.touches[0].clientY;
+            resize();
+        } else if (e.touches.length === 2) {
+            const newDist = getTouchDist(e.touches);
+            if (lastPinchDist > 0) {
+                const zoomFactor = newDist / lastPinchDist;
+                const newScale = Math.min(5, Math.max(0.3, scale * zoomFactor));
+                const containerScale = getContainerScale();
+
+                // Centro do pinch
+                const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const rect = canvas.getBoundingClientRect();
+                const mx = cx - rect.left;
+                const my = cy - rect.top;
+
+                const worldX = (mx - panX) / (containerScale * scale);
+                const worldY = (my - panY) / (containerScale * scale);
+                panX = mx - worldX * (containerScale * newScale);
+                panY = my - worldY * (containerScale * newScale);
+
+                scale = newScale;
+                resize();
+            }
+            lastPinchDist = newDist;
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        if (e.touches.length < 2) lastPinchDist = 0;
+        if (e.touches.length === 0) isTouching = false;
+    });
+
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.1 : 0.1;
@@ -373,7 +441,7 @@
         });
     };
 
-    // Desenha os Grupos de Nichos Verticais (Lado Direito)
+    // Desenha os Grupos de Nichos Verticais (Lado Direito) nao sei q krls eu fiz aqui mas deu muito certo 
     const drawShelfGroup = (x, y, ids, hasFrame = true) => {
         const nW = 45;
         const nH = 85;
@@ -822,6 +890,8 @@
         }
     }
 
+    let registrosAtuais = [];
+
     render();
     carregarEstoque();
 
@@ -871,7 +941,14 @@
 
     function abrirScannerEtq() {
         scanTarget = 'input-etiqueta';
-        iniciarScanner('Escaneie etiquetas para inserir (modo contínuo)');
+        document.getElementById('modal-inserir').classList.add('hidden');
+        iniciarScanner('Escaneie etiquetas para inserir');
+    }
+
+    function abrirScannerPrat() {
+        scanTarget = 'input-prateleira';
+        document.getElementById('modal-inserir').classList.add('hidden');
+        iniciarScanner('Escaneie a prateleira (rua)');
     }
 
     async function iniciarScanner(mensagem) {
@@ -932,13 +1009,30 @@
 
         if (scanTarget === 'input-bip') {
             fecharScannerQRCode();
+        } else if (scanTarget === 'input-prateleira') {
+            fecharScannerQRCode();
+            document.getElementById('modal-inserir').classList.remove('hidden');
+            // Simula Enter para validar a prateleira e habilitar etiqueta
+            const val = normalized;
+            const pratOk = document.getElementById('prateleira-ok');
+            if (prateleirasMapa.has(val)) {
+                pratOk.textContent = '✅ Prateleira ' + val + ' confirmada';
+                pratOk.className = 'text-green-400 text-[10px] font-bold mt-1';
+            } else {
+                pratOk.textContent = '⚠️ Prateleira ' + val + ' (não está no mapa, mas será usada)';
+                pratOk.className = 'text-yellow-400 text-[10px] font-bold mt-1';
+            }
+            pratOk.classList.remove('hidden');
+            document.getElementById('input-etiqueta').disabled = false;
+            document.getElementById('input-etiqueta').focus();
         } else if (scanTarget === 'input-etiqueta') {
-            // Modo contínuo: auto-insere se prateleira já preenchida
+            // Fecha câmera, reabre modal de inserir, insere automaticamente
+            fecharScannerQRCode();
+            document.getElementById('modal-inserir').classList.remove('hidden');
             const prateleira = document.getElementById('input-prateleira').value.trim();
             if (prateleira && normalized) {
                 inserirItem();
             }
-            // Não fecha o scanner - continua escaneando para próxima etiqueta
         }
     }
 
@@ -958,6 +1052,10 @@
     function cancelarScanner() {
         pararScanner();
         document.getElementById('modal-qrcode').classList.add('hidden');
+        // Se veio do inserir, reabre o modal
+        if (scanTarget === 'input-etiqueta' || scanTarget === 'input-prateleira') {
+            document.getElementById('modal-inserir').classList.remove('hidden');
+        }
     }
 
     async function exportarExcelRelatorio() {
@@ -1005,6 +1103,8 @@
 
     function mostrarLogin() {
         document.getElementById('login-modal').classList.remove('hidden');
+        document.getElementById('login-usuario').value = '';
+        document.getElementById('login-senha').value = '';
         document.getElementById('login-usuario').focus();
     }
 
@@ -1303,6 +1403,14 @@
 
     // Atualizar ícones após adicionar novos elementos
     lucide.createIcons();
+
+    // Enter no login
+    document.getElementById('login-usuario').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('login-senha').focus(); }
+    });
+    document.getElementById('login-senha').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); fazerLogin(); }
+    });
 
     // Inicializar sistema
     mostrarLogin();
