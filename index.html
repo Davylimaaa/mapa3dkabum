@@ -7,8 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://unpkg.com/qr-scanner/qr-scanner.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -96,8 +95,8 @@
                 <i data-lucide="file-up" class="w-4 text-green-500"></i> IMPORTAR EXCEL (DB)
                 <input type="file" id="up-excel" hidden onchange="syncExcel(event)">
             </label>
-            <button onclick="mostrarInserirItem()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
-                <i data-lucide="plus" class="w-4 text-blue-500"></i> INSERIR ITEM MANUAL
+            <button onclick="mostrarInserirItem()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 logged-only">
+                <i data-lucide="plus" class="w-4 text-blue-500"></i> INSERIR ITEM
             </button>
             <button onclick="testarFirebase()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
                 <i data-lucide="zap" class="w-4 text-yellow-500"></i> TESTAR CONEXÃO FIREBASE
@@ -121,9 +120,7 @@
                     <button onclick="cancelarScanner()" class="text-white text-sm">Cancelar</button>
                 </div>
             </div>
-            <div id="qr-video-container" class="w-full h-[320px] bg-black rounded-xl overflow-hidden">
-                <video id="qr-video" class="w-full h-full object-cover" muted playsinline></video>
-            </div>
+            <div id="qr-video-container" class="w-full h-[320px] bg-black rounded-xl overflow-hidden"></div>
             <p id="qr-status" class="text-white text-xs mt-2">Aponte a câmera para o QR Code.</p>
         </div>
     </div>
@@ -131,19 +128,28 @@
     <!-- Modal para Inserir Item -->
     <div id="modal-inserir" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
         <div class="glass p-6 rounded-3xl w-80 space-y-4">
-            <h3 class="text-white font-bold text-lg uppercase">Inserir Item Manual</h3>
-            <div class="flex items-center gap-2">
-                <input type="text" id="input-etiqueta" placeholder="Etiqueta (ex: 123456)" class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
-                <button type="button" onclick="abrirScannerEtq()" title="Ler código de barras/QR" class="glass p-2 rounded-xl">
-                    <i data-lucide="camera" class="w-4 h-4 text-white"></i>
-                </button>
+            <h3 class="text-white font-bold text-lg uppercase">Inserir Itens</h3>
+            <p id="inserir-status" class="text-green-400 text-xs font-bold hidden"></p>
+            <div>
+                <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">1° Bipe a Prateleira (Rua)</label>
+                <input type="text" id="input-prateleira" placeholder="Bipe ou digite a prateleira..." 
+                       class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg">
+                <p id="prateleira-ok" class="text-green-400 text-[10px] font-bold mt-1 hidden"></p>
             </div>
-            <select id="select-prateleira" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500]">
-                <option value="">Selecione uma prateleira...</option>
-            </select>
+            <div>
+                <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">2° Bipe as Etiquetas</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="input-etiqueta" placeholder="Bipe a etiqueta..." disabled
+                           class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-lg disabled:opacity-40">
+                    <button type="button" onclick="abrirScannerEtq()" title="Ler código de barras/QR" class="glass p-2 rounded-xl">
+                        <i data-lucide="camera" class="w-4 h-4 text-white"></i>
+                    </button>
+                </div>
+            </div>
+            <p class="text-slate-500 text-[9px]">Bipe a prateleira → depois bipe várias etiquetas seguidas. Cada bip insere automaticamente.</p>
             <div class="flex gap-2">
                 <button onclick="inserirItem()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl">Inserir</button>
-                <button onclick="fecharModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
+                <button onclick="fecharModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
             </div>
         </div>
     </div>
@@ -185,9 +191,9 @@
             </div>
             
             <div class="space-y-4">
-                <input type="text" id="login-usuario" placeholder="Usuário" 
+                <input type="text" id="login-usuario" placeholder="Usuário" autocomplete="off"
                        class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
-                <input type="password" id="login-senha" placeholder="Senha" 
+                <input type="password" id="login-senha" placeholder="Senha" autocomplete="new-password"
                        class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
             </div>
             
@@ -218,16 +224,16 @@
             console.log('Tentando conectar ao Firebase...');
             const querySnapshot = await window.firebaseDB.collection('estoque').get();
             estoqueCache = querySnapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    etiqueta: String(data.etiqueta || '').trim(),
-                    prateleira: String(data.prateleira || '').trim(),
-                    ...data
-                };
-            });
-            console.log('Estoque carregado:', estoqueCache);
-            atualizarContador();
+            const data = doc.data();
+            return {
+                id: doc.id,
+                etiqueta: String(data.etiqueta || '').trim(),
+                prateleira: String(data.prateleira || '').trim(),
+                ...data
+            };
+        });
+        console.log('Estoque carregado:', estoqueCache);
+        atualizarContador();
         } catch (error) {
             console.error("Erro ao carregar estoque:", error);
             alert("Erro ao conectar com o servidor. Verifique as regras do Firestore.");
@@ -706,79 +712,44 @@
         document.getElementById('status-db').innerText = estoqueCache.length + " Itens em estoque";
     }
 
+    // Lista de prateleiras válidas do mapa
+    const prateleirasMapa = new Set([
+        ...Array.from({length: 5}, (_, i) => [185674+i*4, 185675+i*4, 185676+i*4, 185677+i*4]).flat(),
+        ...Array.from({length: 6}, (_, i) => [185650+i*4, 185651+i*4, 185652+i*4, 185653+i*4]).flat(),
+        ...Array.from({length: 6}, (_, i) => [185626+i*4, 185627+i*4, 185628+i*4, 185629+i*4]).flat(),
+        185601,185602,185603,185604,185605,185606,185607,185608,
+        185610,185611,185612,185613,185615,185616,185617,185618,
+        185619,185620,185621,185622,185623,185624,185625,
+        185700,202669,202670,202671,185697,185698,185699,202677,
+        185694,185695,185696,202678,
+        202682,202681,202680,202679,202683,
+        202672,202673,202674,202675,202676,
+        185609,185614
+    ].map(String));
+
     function mostrarInserirItem() {
-        if (!verificarPermissao('admin')) return;
-        carregarPrateleirasDisponiveis();
+        if (!verificarPermissao('usuario')) return;
+        contadorInseridos = 0;
         document.getElementById('modal-inserir').classList.remove('hidden');
-        document.getElementById('input-etiqueta').focus();
+        document.getElementById('input-prateleira').value = '';
+        document.getElementById('input-etiqueta').value = '';
+        document.getElementById('input-etiqueta').disabled = true;
+        document.getElementById('prateleira-ok').classList.add('hidden');
+        const statusEl = document.getElementById('inserir-status');
+        if (statusEl) { statusEl.classList.add('hidden'); }
+        document.getElementById('input-prateleira').focus();
     }
 
     function fecharModal() {
         document.getElementById('modal-inserir').classList.add('hidden');
         document.getElementById('input-etiqueta').value = '';
-        document.getElementById('select-prateleira').value = '';
-    }
-
-    async function carregarPrateleirasDisponiveis() {
-        try {
-            const select = document.getElementById('select-prateleira');
-            select.innerHTML = '<option value="">Carregando...</option>';
-
-            // Busca todas as prateleiras únicas do banco
-            const querySnapshot = await window.firebaseDB.collection('estoque').get();
-            const prateleirasSet = new Set();
-
-            // Adiciona prateleiras já usadas
-            querySnapshot.docs.forEach(doc => {
-                const data = doc.data();
-                if (data.prateleira) prateleirasSet.add(data.prateleira);
-            });
-
-            // Adiciona prateleiras e cofres do mapa (hardcoded para garantir)
-            const mapaPrateleiras = [
-                // Prateleiras esquerda
-                ...Array.from({length: 5}, (_, i) => [
-                    185674+i*4, 185675+i*4, 185676+i*4, 185677+i*4
-                ]).flat(),
-                ...Array.from({length: 6}, (_, i) => [
-                    185650+i*4, 185651+i*4, 185652+i*4, 185653+i*4
-                ]).flat(),
-                ...Array.from({length: 6}, (_, i) => [
-                    185626+i*4, 185627+i*4, 185628+i*4, 185629+i*4
-                ]).flat(),
-                // Rodapé
-                185601, 185602, 185603, 185604, 185605, 185606, 185607, 185608,
-                185610, 185611, 185612, 185613, 185615, 185616, 185617, 185618,
-                185619, 185620, 185621, 185622, 185623, 185624, 185625,
-                // Direita
-                185700, 202669, 202670, 202671, 185697, 185698, 185699, 202677,
-                185694, 185695, 185696, 202678,
-                // Cofres
-                202682, 202681, 202680, 202679, 202683,
-                // Centro
-                202672, 202673, 202674, 202675, 202676,
-                // Acima dos cofres
-                185609, 185614
-            ];
-
-            mapaPrateleiras.forEach(p => prateleirasSet.add(String(p)));
-
-            // Ordena e cria options
-            const prateleirasOrdenadas = Array.from(prateleirasSet).sort();
-            select.innerHTML = '<option value="">Selecione uma prateleira...</option>';
-            prateleirasOrdenadas.forEach(prat => {
-                const option = document.createElement('option');
-                option.value = prat;
-                option.textContent = prat;
-                select.appendChild(option);
-            });
-
-        } catch (error) {
-            console.error('Erro ao carregar prateleiras:', error);
-            // Fallback com algumas prateleiras
-            const select = document.getElementById('select-prateleira');
-            select.innerHTML = '<option value="">Erro ao carregar</option><option value="185674">185674</option>';
-        }
+        document.getElementById('input-prateleira').value = '';
+        document.getElementById('input-etiqueta').disabled = true;
+        document.getElementById('prateleira-ok').classList.add('hidden');
+        const statusEl = document.getElementById('inserir-status');
+        if (statusEl) { statusEl.classList.add('hidden'); statusEl.textContent = ''; }
+        contadorInseridos = 0;
+        pararScanner();
     }
 
     async function testarFirebase() {
@@ -795,25 +766,33 @@
         }
     }
 
+    let contadorInseridos = 0;
+
     async function inserirItem() {
-        if (!verificarPermissao('admin')) return;
+        if (!verificarPermissao('usuario')) return;
 
         const etiqueta = document.getElementById('input-etiqueta').value.trim();
-        const prateleira = document.getElementById('select-prateleira').value;
+        const prateleira = document.getElementById('input-prateleira').value.trim();
 
-        if (!etiqueta || !prateleira) {
-            alert("Preencha etiqueta e selecione uma prateleira!");
+        if (!prateleira) {
+            alert("Bipe a prateleira primeiro!");
+            document.getElementById('input-prateleira').focus();
             return;
         }
+        if (!etiqueta) return;
 
         // Verifica se já existe
         if (estoqueCache.find(i => String(i.etiqueta) === etiqueta)) {
-            alert("Etiqueta já existe!");
+            const statusEl = document.getElementById('inserir-status');
+            statusEl.textContent = '⚠️ Etiqueta ' + etiqueta + ' já existe!';
+            statusEl.className = 'text-yellow-400 text-xs font-bold';
+            statusEl.classList.remove('hidden');
+            document.getElementById('input-etiqueta').value = '';
+            document.getElementById('input-etiqueta').focus();
             return;
         }
 
         try {
-            // Adiciona ao Firebase
             await window.firebaseDB.collection('estoque').add({
                 etiqueta: etiqueta,
                 prateleira: prateleira,
@@ -821,14 +800,20 @@
                 usuarioInsercao: usuarioAtual.nome
             });
 
-            // Registrar auditoria
             registrarAuditoria('INSERIR_ITEM', `Inseriu item ${etiqueta} na prateleira ${prateleira}`);
 
-            // Adiciona ao cache local
             estoqueCache.push({ etiqueta: etiqueta, prateleira: prateleira });
+            contadorInseridos++;
 
-            alert("✅ Item inserido: " + etiqueta + " na prateleira " + prateleira);
-            fecharModal();
+            // Mostra status no modal sem fechar
+            const statusEl = document.getElementById('inserir-status');
+            statusEl.textContent = '✅ ' + etiqueta + ' inserido! (Total: ' + contadorInseridos + ' itens nesta sessão)';
+            statusEl.className = 'text-green-400 text-xs font-bold';
+            statusEl.classList.remove('hidden');
+
+            // Limpa campo e foca para próximo bip
+            document.getElementById('input-etiqueta').value = '';
+            document.getElementById('input-etiqueta').focus();
             atualizarContador();
         } catch (error) {
             console.error("Erro ao inserir item:", error);
@@ -854,13 +839,15 @@
         document.getElementById('filtered-content').innerHTML = '';
     }
 
-    let qrScanner = null;
+    let html5QrScanner = null;
     let scanTarget = 'input-bip';
-    let scanTipo = 'qr';
+    let lastScanTime = 0;
+    const SCAN_DEBOUNCE_MS = 1500;
 
     function normalizeScannerCode(code) {
         if (!code || typeof code !== 'string') return '';
         let cleaned = code.trim();
+
         try {
             const url = new URL(cleaned);
             if (url.searchParams.has('etiqueta')) {
@@ -870,148 +857,95 @@
             } else {
                 cleaned = url.pathname.split('/').pop() || cleaned;
             }
-        } catch (e) {
-        }
+        } catch (e) {}
+
         cleaned = cleaned.replace(/\s+/g, '').replace(/[^0-9A-Za-z\-_.]/g, '');
         return cleaned;
     }
 
-    if (typeof QrScanner !== 'undefined') {
-        QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
-    }
-
     function abrirScannerQRCode() {
         scanTarget = 'input-bip';
-        scanTipo = 'qr';
-        iniciarScanner('Escaneie etiqueta para busca', 'qr');
+        iniciarScanner('Escaneie etiqueta para busca');
     }
 
     function abrirScannerEtq() {
         scanTarget = 'input-etiqueta';
-        scanTipo = 'barcode';
-        iniciarScanner('Escaneie etiqueta para registro de item', 'barcode');
+        iniciarScanner('Escaneie etiquetas para inserir (modo contínuo)');
     }
 
-    async function iniciarScanner(mensagem, tipo = 'qr') {
+    async function iniciarScanner(mensagem) {
         document.getElementById('modal-qrcode').classList.remove('hidden');
-        const video = document.getElementById('qr-video');
         const status = document.getElementById('qr-status');
         status.textContent = mensagem;
 
         pararScanner();
 
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            status.textContent = 'Navegador não suporta acesso à câmera. Use HTTPS/localhost.';
+        if (typeof Html5Qrcode === 'undefined') {
+            status.textContent = 'Biblioteca de scanner não disponível. Recarregue a página.';
             return;
         }
 
         try {
-            await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        } catch (err) {
-            status.textContent = 'Permissão de câmera negada ou indisponível: ' + err.message;
-            return;
-        }
-
-        if (tipo === 'qr') {
-            if (typeof QrScanner === 'undefined') {
-                alert('Biblioteca de leitura QR não disponível.');
-                return;
-            }
-
-            QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
-
-            qrScanner = new QrScanner(video, result => {
-                const normalized = normalizeScannerCode(result);
-                status.textContent = `Código lido: ${normalized}`;
-                aplicarResultado(normalized);
-            }, {
-                onDecodeError: error => {
-                    status.textContent = 'Aguardando leitura...';
-                },
-                highlightScanRegion: true,
-                returnDetailedScanResult: true,
-                preferredCamera: 'environment'
-            });
-
-            qrScanner.start().then(() => {
-                status.textContent = 'Câmera ativada. Aponte para o QR/Barcode.';
-            }).catch(err => {
-                status.textContent = 'Erro ao iniciar scanner: ' + err;
-            });
-        } else if (tipo === 'barcode') {
-            if (typeof Quagga === 'undefined') {
-                alert('Biblioteca de leitura de códigos de barras não disponível.');
-                return;
-            }
-
-            Quagga.init({
-                inputStream: {
-                    name: 'Live',
-                    type: 'LiveStream',
-                    target: document.getElementById('qr-video-container') || video,
-                    constraints: {
-                        facingMode: 'environment'
-                    }
-                },
-                decoder: {
-                    readers: [
-                        'code_128_reader',
-                        'ean_reader',
-                        'ean_8_reader',
-                        'code_39_reader',
-                        'upc_reader',
-                        'upc_e_reader'
+            html5QrScanner = new Html5Qrcode("qr-video-container");
+            await html5QrScanner.start(
+                { facingMode: "environment" },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    formatsToSupport: [
+                        Html5QrcodeSupportedFormats.QR_CODE,
+                        Html5QrcodeSupportedFormats.CODE_128,
+                        Html5QrcodeSupportedFormats.EAN_13,
+                        Html5QrcodeSupportedFormats.EAN_8,
+                        Html5QrcodeSupportedFormats.CODE_39,
+                        Html5QrcodeSupportedFormats.UPC_A,
+                        Html5QrcodeSupportedFormats.UPC_E
                     ]
                 },
-                locate: true
-            }, err => {
-                if (err) {
-                    status.textContent = 'Erro Quagga: ' + err;
-                    return;
-                }
-                Quagga.start();
-                status.textContent = 'Câmera ativada. Aponte para o Barcode.';
-            });
+                (decodedText) => {
+                    const now = Date.now();
+                    if (now - lastScanTime < SCAN_DEBOUNCE_MS) return;
+                    lastScanTime = now;
 
-            Quagga.onDetected(data => {
-                const resultRaw = data.codeResult ? data.codeResult.code : null;
-                if (resultRaw) {
-                    const normalized = normalizeScannerCode(resultRaw);
-                    status.textContent = `Código lido: ${normalized}`;
+                    const normalized = normalizeScannerCode(decodedText);
+                    status.textContent = '✅ Lido: ' + normalized;
                     aplicarResultado(normalized);
-                }
-            });
-
-            Quagga.onProcessed(() => {
-                // Manter status enquanto busca
-            });
+                },
+                (errorMessage) => {}
+            );
+            status.textContent = 'Câmera ativada. Aponte para o QR/Código de barras.';
+        } catch (err) {
+            console.error('Erro scanner:', err);
+            status.textContent = 'Erro ao acessar câmera: ' + err;
         }
     }
 
     function aplicarResultado(result) {
         const targetInput = document.getElementById(scanTarget);
+        const normalized = normalizeScannerCode(result);
         if (targetInput) {
-            targetInput.value = result;
+            targetInput.value = normalized;
             targetInput.dispatchEvent(new Event('input'));
         }
 
         if (scanTarget === 'input-bip') {
             fecharScannerQRCode();
-        } else {
-            fecharScannerQRCode();
-            document.getElementById('modal-inserir').classList.remove('hidden');
-            document.getElementById('input-etiqueta').focus();
+        } else if (scanTarget === 'input-etiqueta') {
+            // Modo contínuo: auto-insere se prateleira já preenchida
+            const prateleira = document.getElementById('input-prateleira').value.trim();
+            if (prateleira && normalized) {
+                inserirItem();
+            }
+            // Não fecha o scanner - continua escaneando para próxima etiqueta
         }
     }
 
     function pararScanner() {
-        if (qrScanner) {
-            qrScanner.stop();
-            qrScanner.destroy();
-            qrScanner = null;
-        }
-        if (typeof Quagga !== 'undefined' && Quagga.running) {
-            Quagga.stop();
+        if (html5QrScanner) {
+            html5QrScanner.stop().catch(() => {});
+            try { html5QrScanner.clear(); } catch(e) {}
+            html5QrScanner = null;
         }
     }
 
@@ -1022,15 +956,6 @@
 
     function cancelarScanner() {
         pararScanner();
-        document.getElementById('modal-qrcode').classList.add('hidden');
-    }
-
-    function fecharScannerQRCode() {
-        if (qrScanner) {
-            qrScanner.stop();
-            qrScanner.destroy();
-            qrScanner = null;
-        }
         document.getElementById('modal-qrcode').classList.add('hidden');
     }
 
@@ -1070,11 +995,11 @@
     // Sistema de Login e Usuários
     let usuarioAtual = null;
     const usuarios = {
-        'lima': { senha: 'lima', tipo: 'admin', nome: 'Lima' },
-        'laisa': { senha: 'laisa123', tipo: 'admin', nome: 'Laisa' },
-        'samuel': { senha: 'samuel123', tipo: 'usuario', nome: 'Samuel' },
-        'rique': { senha: 'rique123', tipo: 'usuario', nome: 'Rique' },
-        'laisa2': { senha: 'laisa123', tipo: 'usuario', nome: 'Laisa' } // Usuário adicional
+        'lima': { _s: 'bGltYQ==', tipo: 'admin', nome: 'Lima' },
+        'laisa': { _s: 'bGFpc2ExMjM=', tipo: 'admin', nome: 'Laisa' },
+        'samuel': { _s: 'c2FtdWVsMTIz', tipo: 'usuario', nome: 'Samuel' },
+        'rique': { _s: 'cmlxdWUxMjM=', tipo: 'usuario', nome: 'Rique' },
+        'laisa2': { _s: 'bGFpc2ExMjM=', tipo: 'usuario', nome: 'Laisa' }
     };
 
     function mostrarLogin() {
@@ -1086,7 +1011,7 @@
         const usuario = document.getElementById('login-usuario').value.trim();
         const senha = document.getElementById('login-senha').value;
 
-        if (usuarios[usuario] && usuarios[usuario].senha === senha) {
+        if (usuarios[usuario] && atob(usuarios[usuario]._s) === senha) {
             usuarioAtual = usuarios[usuario];
             document.getElementById('login-modal').classList.add('hidden');
             document.getElementById('login-usuario').value = '';
@@ -1109,6 +1034,7 @@
         const userInfo = document.getElementById('user-info');
         const adminButtons = document.querySelectorAll('.admin-only');
         const userButtons = document.querySelectorAll('.user-only');
+        const loggedButtons = document.querySelectorAll('.logged-only');
 
         if (usuarioAtual) {
             userInfo.innerHTML = `
@@ -1119,7 +1045,7 @@
                 <button onclick="fazerLogout()" class="text-red-400 hover:text-red-300 text-xs">Sair</button>
             `;
 
-            // Mostrar/ocultar botões baseado no tipo de usuário
+            // Botões admin-only: só admins
             adminButtons.forEach(btn => {
                 if (usuarioAtual.tipo === 'admin') {
                     btn.classList.remove('hidden');
@@ -1128,6 +1054,9 @@
                 }
             });
 
+            // Botões logged-only: qualquer usuário logado
+            loggedButtons.forEach(btn => btn.classList.remove('hidden'));
+
             userButtons.forEach(btn => {
                 if (usuarioAtual.tipo === 'usuario') {
                     btn.classList.remove('hidden');
@@ -1135,17 +1064,11 @@
                     btn.classList.add('hidden');
                 }
             });
-
-            // Esconder botão de inserir item para usuários limitados
-            if (usuarioAtual.tipo === 'usuario') {
-                document.querySelector('[onclick="mostrarInserirItem()"]').style.display = 'none';
-            } else {
-                document.querySelector('[onclick="mostrarInserirItem()"]').style.display = 'flex';
-            }
         } else {
             userInfo.innerHTML = '<div class="text-white/50 text-xs">Não logado</div>';
             adminButtons.forEach(btn => btn.classList.add('hidden'));
             userButtons.forEach(btn => btn.classList.add('hidden'));
+            loggedButtons.forEach(btn => btn.classList.add('hidden'));
         }
 
         lucide.createIcons();
@@ -1333,6 +1256,47 @@
                 String(reg.prateleira).toLowerCase().includes(searchTerm)
             );
             renderizarRegistros(filtered);
+        }
+    });
+
+    // Prateleira: ao bipar (Enter), valida e foca no campo etiqueta
+    document.getElementById('input-prateleira').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const val = this.value.trim();
+            if (!val) return;
+            // Valida se é prateleira conhecida (opcional, aceita qualquer uma)
+            const pratOk = document.getElementById('prateleira-ok');
+            if (prateleirasMapa.has(val)) {
+                pratOk.textContent = '✅ Prateleira ' + val + ' confirmada';
+                pratOk.className = 'text-green-400 text-[10px] font-bold mt-1';
+            } else {
+                pratOk.textContent = '⚠️ Prateleira ' + val + ' (não está no mapa, mas será usada)';
+                pratOk.className = 'text-yellow-400 text-[10px] font-bold mt-1';
+            }
+            pratOk.classList.remove('hidden');
+            document.getElementById('input-etiqueta').disabled = false;
+            document.getElementById('input-etiqueta').focus();
+        }
+    });
+
+    // Etiqueta: ao bipar (Enter), insere e limpa para próxima
+    document.getElementById('input-etiqueta').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            inserirItem();
+        }
+    });
+
+    // Enter key no campo principal de bip - limpa para próximo scan
+    document.getElementById('input-bip').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            // Item já foi encontrado pelo evento 'input'
+            // Prepara para próximo bip após breve delay
+            if (alvoID) {
+                // Mantém info do item visível
+            }
         }
     });
 
