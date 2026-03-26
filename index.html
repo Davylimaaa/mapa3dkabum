@@ -704,7 +704,21 @@
             localStorage.setItem('ultimaBaixa', JSON.stringify({ etiqueta: etiquetaAtual, prateleira: alvoID, data: new Date().toISOString() }));
 
             // Reseta interface
-            alert("✅ BAIXA REALIZADA: Etiqueta " + etiquetaAtual + " removida do estoque.");
+            const etiquetaCopiar = etiquetaAtual;
+            alert("✅ BAIXA REALIZADA: Etiqueta " + etiquetaAtual + " removida do estoque.\n\nEtiqueta copiada para a área de transferência!");
+
+            // Copia etiqueta para o clipboard (Ctrl+V no próximo site)
+            try {
+                await navigator.clipboard.writeText(etiquetaCopiar);
+            } catch(clipErr) {
+                // Fallback para navegadores que bloqueiam clipboard
+                const tmp = document.createElement('textarea');
+                tmp.value = etiquetaCopiar;
+                document.body.appendChild(tmp);
+                tmp.select();
+                document.execCommand('copy');
+                document.body.removeChild(tmp);
+            }
 
             etiquetaAtual = null;
             alvoID = null;
