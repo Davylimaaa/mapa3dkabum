@@ -121,7 +121,9 @@
                     <button onclick="cancelarScanner()" class="text-white text-sm">Cancelar</button>
                 </div>
             </div>
-            <video id="qr-video" class="w-full h-[320px] bg-black rounded-xl" muted playsinline></video>
+            <div id="qr-video-container" class="w-full h-[320px] bg-black rounded-xl overflow-hidden">
+                <video id="qr-video" class="w-full h-full object-cover" muted playsinline></video>
+            </div>
             <p id="qr-status" class="text-white text-xs mt-2">Aponte a câmera para o QR Code.</p>
         </div>
     </div>
@@ -215,7 +217,15 @@
         try {
             console.log('Tentando conectar ao Firebase...');
             const querySnapshot = await window.firebaseDB.collection('estoque').get();
-            estoqueCache = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            estoqueCache = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    etiqueta: String(data.etiqueta || '').trim(),
+                    prateleira: String(data.prateleira || '').trim(),
+                    ...data
+                };
+            });
             console.log('Estoque carregado:', estoqueCache);
             atualizarContador();
         } catch (error) {
@@ -568,21 +578,29 @@
         }
     }
     document.getElementById('input-bip').addEventListener('input', (e) => {
-        const val = e.target.value.trim();
-        if(val.length < 3) {
+        const rawValue = e.target.value;
+        const val = normalizeScannerCode(rawValue);
+
+        if(val.length < 2) {
             alvoID = null;
             document.getElementById('info-item').classList.add('hidden');
             return;
         }
 
-        const item = estoqueCache.find(i => String(i.etiqueta) === val);
+        const item = estoqueCache.find(i =>
+            String(i.etiqueta) === val ||
+            String(i.prateleira) === val ||
+            String(i.etiqueta) === rawValue ||
+            String(i.prateleira) === rawValue
+        );
+
         if(item) {
-            alvoID = item.prateleira;
-            etiquetaAtual = val;
+            alvoID = String(item.prateleira).trim();
+            etiquetaAtual = String(item.etiqueta).trim();
             document.getElementById('info-item').classList.remove('hidden');
-            document.getElementById('est-v').innerText = alvoID;            
-            // Focar no item encontrado
-            focarItem(item.prateleira);        } else {
+            document.getElementById('est-v').innerText = alvoID;
+            focarItem(alvoID);
+        } else {
             alvoID = null;
             document.getElementById('info-item').classList.add('hidden');
         }
@@ -840,6 +858,28 @@
     let scanTarget = 'input-bip';
     let scanTipo = 'qr';
 
+    function normalizeScannerCode(code) {
+        if (!code || typeof code !== 'string') return '';
+        let cleaned = code.trim();
+        try {
+            const url = new URL(cleaned);
+            if (url.searchParams.has('etiqueta')) {
+                cleaned = url.searchParams.get('etiqueta');
+            } else if (url.searchParams.has('id')) {
+                cleaned = url.searchParams.get('id');
+            } else {
+                cleaned = url.pathname.split('/').pop() || cleaned;
+            }
+        } catch (e) {
+        }
+        cleaned = cleaned.replace(/\s+/g, '').replace(/[^0-9A-Za-z\-_.]/g, '');
+        return cleaned;
+    }
+
+    if (typeof QrScanner !== 'undefined') {
+        QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
+    }
+
     function abrirScannerQRCode() {
         scanTarget = 'input-bip';
         scanTipo = 'qr';
@@ -852,7 +892,7 @@
         iniciarScanner('Escaneie etiqueta para registro de item', 'barcode');
     }
 
-    function iniciarScanner(mensagem, tipo = 'qr') {
+    async function iniciarScanner(mensagem, tipo = 'qr') {
         document.getElementById('modal-qrcode').classList.remove('hidden');
         const video = document.getElementById('qr-video');
         const status = document.getElementById('qr-status');
@@ -860,24 +900,43 @@
 
         pararScanner();
 
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            status.textContent = 'Navegador não suporta acesso à câmera. Use HTTPS/localhost.';
+            return;
+        }
+
+        try {
+            await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        } catch (err) {
+            status.textContent = 'Permissão de câmera negada ou indisponível: ' + err.message;
+            return;
+        }
+
         if (tipo === 'qr') {
             if (typeof QrScanner === 'undefined') {
                 alert('Biblioteca de leitura QR não disponível.');
                 return;
             }
 
+            QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner/qr-scanner-worker.min.js';
+
             qrScanner = new QrScanner(video, result => {
-                status.textContent = `Código lido: ${result}`;
-                aplicarResultado(result);
+                const normalized = normalizeScannerCode(result);
+                status.textContent = `Código lido: ${normalized}`;
+                aplicarResultado(normalized);
             }, {
                 onDecodeError: error => {
                     status.textContent = 'Aguardando leitura...';
                 },
-                highlightScanRegion: true
+                highlightScanRegion: true,
+                returnDetailedScanResult: true,
+                preferredCamera: 'environment'
             });
 
-            qrScanner.start().catch(err => {
-                status.textContent = 'Erro ao acessar câmera: ' + err;
+            qrScanner.start().then(() => {
+                status.textContent = 'Câmera ativada. Aponte para o QR/Barcode.';
+            }).catch(err => {
+                status.textContent = 'Erro ao iniciar scanner: ' + err;
             });
         } else if (tipo === 'barcode') {
             if (typeof Quagga === 'undefined') {
@@ -889,7 +948,7 @@
                 inputStream: {
                     name: 'Live',
                     type: 'LiveStream',
-                    target: video,
+                    target: document.getElementById('qr-video-container') || video,
                     constraints: {
                         facingMode: 'environment'
                     }
@@ -911,13 +970,15 @@
                     return;
                 }
                 Quagga.start();
+                status.textContent = 'Câmera ativada. Aponte para o Barcode.';
             });
 
             Quagga.onDetected(data => {
-                const result = data.codeResult ? data.codeResult.code : null;
-                if (result) {
-                    status.textContent = `Código lido: ${result}`;
-                    aplicarResultado(result);
+                const resultRaw = data.codeResult ? data.codeResult.code : null;
+                if (resultRaw) {
+                    const normalized = normalizeScannerCode(resultRaw);
+                    status.textContent = `Código lido: ${normalized}`;
+                    aplicarResultado(normalized);
                 }
             });
 
