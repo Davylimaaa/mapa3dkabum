@@ -33,7 +33,10 @@
     <style>
         body { margin: 0; background: #020617; font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; color: white; }
         #map-section { flex: 1; background: #020617; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
-        #control-panel { width: 360px; background: #0f172a; padding: 25px; display: flex; flex-direction: column; gap: 20px; z-index: 50; border-left: 1px solid rgba(255,255,255,0.1); box-shadow: -10px 0 30px rgba(0,0,0,0.5); }
+        #log-canvas { max-width: 100%; max-height: 100%; }
+        #control-panel { width: 360px; background: #0f172a; padding: 25px; display: flex; flex-direction: column; gap: 20px; z-index: 50; border-left: 1px solid rgba(255,255,255,0.1); box-shadow: -10px 0 30px rgba(0,0,0,0.5); overflow-y: auto; }
+        #max-map-btn { position: absolute; top: 12px; right: 12px; z-index: 20; }
+
         .glass { background: rgba(30, 41, 59, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
         canvas { border-radius: 12px; cursor: crosshair; }
         .btn-baixa { background: linear-gradient(to right, #dc2626, #991b1b); transition: all 0.3s ease; }
@@ -43,15 +46,18 @@
 <body>
 
     <div id="map-section">
+        <button id="max-map-btn" onclick="maximizarMapa()" class="glass px-3 py-2 rounded-lg text-xs uppercase font-bold text-white/80 hover:text-white">Maximizar Mapa</button>
         <canvas id="log-canvas"></canvas>
     </div>
 
     <div id="control-panel">
         <div class="mb-2">
-            <h1 class="text-[#ff6500] font-black italic text-4xl tracking-tighter uppercase leading-none">Lima</h1>
+            <h1 class="text-[#ff6500] font-black italic text-4xl tracking-tighter uppercase leading-none">KABUM<h1></h1>
             <h2 class="text-blue-500 text-[10px] font-bold tracking-[0.3em] mt-1 uppercase">Logística Oficial</h2>
         </div>
-
+        <div id="user-info" class="glass p-3 rounded-xl mb-4">
+            <div class="text-white/50 text-xs">Não logado</div>
+        </div>
         <div class="glass p-5 rounded-3xl space-y-3">
             <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest">Aguardando Scanner...</label>
             <input type="text" id="input-bip" autofocus placeholder="Bipe a Etiqueta..." 
@@ -71,15 +77,18 @@
         </div>
 
         <div class="mt-auto space-y-3">
-            <label class="w-full glass px-4 py-4 rounded-xl cursor-pointer text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
+            <label class="w-full glass px-4 py-4 rounded-xl cursor-pointer text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
                 <i data-lucide="file-up" class="w-4 text-green-500"></i> IMPORTAR EXCEL (DB)
                 <input type="file" id="up-excel" hidden onchange="syncExcel(event)">
             </label>
-            <button onclick="mostrarInserirItem()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
+            <button onclick="mostrarInserirItem()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
                 <i data-lucide="plus" class="w-4 text-blue-500"></i> INSERIR ITEM MANUAL
             </button>
             <button onclick="testarFirebase()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700">
                 <i data-lucide="zap" class="w-4 text-yellow-500"></i> TESTAR CONEXÃO FIREBASE
+            </button>
+            <button onclick="mostrarRelatorios()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
+                <i data-lucide="file-text" class="w-4 text-purple-500"></i> RELATÓRIOS
             </button>
             <div class="flex justify-between items-center px-2">
                 <p id="status-db" class="text-[8px] text-slate-500 uppercase font-bold">Base de dados vazia</p>
@@ -98,6 +107,60 @@
             <div class="flex gap-2">
                 <button onclick="inserirItem()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl">Inserir</button>
                 <button onclick="fecharModal()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Relatórios -->
+    <div id="modal-relatorios" class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-96 space-y-4">
+            <h3 class="text-white font-bold text-lg uppercase">Relatórios</h3>
+            <div class="space-y-3">
+                <button onclick="exportarExcelRelatorio()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                    <i data-lucide="download" class="w-4"></i> EXPORTAR EXCEL (Histórico Completo)
+                </button>
+                <button onclick="verRegistrosAtuais()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                    <i data-lucide="list" class="w-4"></i> VER REGISTROS ATUAIS
+                </button>
+                <button onclick="verAuditoria()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
+                    <i data-lucide="activity" class="w-4"></i> VER AUDITORIA
+                </button>
+            </div>
+            <div id="relatorios-content" class="hidden max-h-60 overflow-y-auto space-y-2"></div>
+            <div id="search-container" class="hidden space-y-2">
+                <div class="relative">
+                    <input type="text" id="search-etiqueta" placeholder="Buscar por etiqueta..." 
+                           class="w-full bg-slate-900 border border-slate-700 p-3 pl-10 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] placeholder-gray-400">
+                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"></i>
+                </div>
+                <div id="filtered-content" class="max-h-40 overflow-y-auto space-y-2"></div>
+            </div>
+            <button onclick="fecharRelatorios()" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal de Login -->
+    <div id="login-modal" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="glass p-8 rounded-3xl w-80 space-y-6">
+            <div class="text-center">
+                <h2 class="text-white font-black text-2xl uppercase">Login</h2>
+                <p class="text-white/70 text-sm mt-2">Sistema de Gestão de Estoque</p>
+            </div>
+            
+            <div class="space-y-4">
+                <input type="text" id="login-usuario" placeholder="Usuário" 
+                       class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                <input type="password" id="login-senha" placeholder="Senha" 
+                       class="w-full bg-slate-900 border border-slate-700 p-4 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+            </div>
+            
+            <button onclick="fazerLogin()" class="w-full bg-[#ff6500] hover:bg-[#e55a00] text-white font-black py-4 rounded-xl text-lg uppercase">
+                Entrar
+            </button>
+            
+            <div class="text-center text-white/50 text-xs">
+                <p><strong>Admins:</strong> lima/lima, laisa/laisa123</p>
+                <p><strong>Usuários:</strong> samuel/samuel123, rique/rique123</p>
             </div>
         </div>
     </div>
@@ -130,17 +193,92 @@
     }
 
     // Proporção do Mapa
-    const BASE_W = 1250;
-    const BASE_H = 850;
+    const BASE_W = 1800; // Aumentado de 1250 para 1800
+    const BASE_H = 1200; // Aumentado de 850 para 1200
+
+    // Variáveis para pan e zoom
+    let panX = 0;
+    let panY = 0;
+    let scale = 1;
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
+    function getContainerScale() {
+        return Math.min(mapSection.clientWidth / BASE_W, mapSection.clientHeight / BASE_H) * 0.95;
+    }
+
+    function maximizarMapa() {
+        // Ajusta para mapear o maior possível no espaço disponível
+        scale = 1;
+        panX = 0;
+        panY = 0;
+        resize();
+    }
 
     function resize() {
-        const scale = Math.min(mapSection.clientWidth / BASE_W, mapSection.clientHeight / BASE_H) * 0.95;
-        canvas.width = BASE_W * scale;
-        canvas.height = BASE_H * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
+        const containerScale = getContainerScale();
+        canvas.width = BASE_W * containerScale;
+        canvas.height = BASE_H * containerScale;
+        ctx.setTransform(containerScale * scale, 0, 0, containerScale * scale, panX, panY);
     }
+
     window.addEventListener('resize', resize);
     resize();
+
+    // Event listeners para pan (arrastar o mapa)
+    canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            const deltaX = e.clientX - lastMouseX;
+            const deltaY = e.clientY - lastMouseY;
+            panX += deltaX;
+            panY += deltaY;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            resize(); // Reaplica a transformação
+        }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        const newScale = Math.min(3, Math.max(0.5, scale + delta));
+        const containerScale = getContainerScale();
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        // Manter foco sob o cursor durante zoom
+        const worldX = (mouseX - panX) / (containerScale * scale);
+        const worldY = (mouseY - panY) / (containerScale * scale);
+
+        panX = mouseX - worldX * (containerScale * newScale);
+        panY = mouseY - worldY * (containerScale * newScale);
+
+        scale = newScale;
+        resize();
+    }, { passive: false });
+
+    // Definir cursor inicial
+    canvas.style.cursor = 'grab';
 
     // Desenha Prateleiras Padrão (Lado Esquerdo)
     const drawShelf = (x, y, ids) => {
@@ -317,7 +455,83 @@
         requestAnimationFrame(render);
     }
 
-    // LÓGICA DE BUSCA
+    // Função para focar no item encontrado
+    function focarItem(prateleiraID) {
+        // Mapeamento de posições aproximadas das prateleiras
+        const posicoes = {
+            // Prateleiras esquerda - primeira fileira
+            '185674': [40, 40], '185675': [40, 66], '185676': [40, 92], '185677': [40, 118],
+            '185678': [150, 40], '185679': [150, 66], '185680': [150, 92], '185681': [150, 118],
+            '185682': [260, 40], '185683': [260, 66], '185684': [260, 92], '185685': [260, 118],
+            '185686': [370, 40], '185687': [370, 66], '185688': [370, 92], '185689': [370, 118],
+            '185690': [480, 40], '185691': [480, 66], '185692': [480, 92], '185693': [480, 118],
+            // Segunda fileira
+            '185650': [40, 200], '185651': [40, 226], '185652': [40, 252], '185653': [40, 278],
+            '185654': [150, 200], '185655': [150, 226], '185656': [150, 252], '185657': [150, 278],
+            '185658': [260, 200], '185659': [260, 226], '185660': [260, 252], '185661': [260, 278],
+            '185662': [370, 200], '185663': [370, 226], '185664': [370, 252], '185665': [370, 278],
+            '185666': [480, 200], '185667': [480, 226], '185668': [480, 252], '185669': [480, 278],
+            '185670': [590, 200], '185671': [590, 226], '185672': [590, 252], '185673': [590, 278],
+            // Terceira fileira
+            '185626': [40, 380], '185627': [40, 406], '185628': [40, 432], '185629': [40, 458],
+            '185630': [150, 380], '185631': [150, 406], '185632': [150, 432], '185633': [150, 458],
+            '185634': [260, 380], '185635': [260, 406], '185636': [260, 432], '185637': [260, 458],
+            '185638': [370, 380], '185639': [370, 406], '185640': [370, 432], '185641': [370, 458],
+            '185642': [480, 380], '185643': [480, 406], '185644': [480, 432], '185645': [480, 458],
+            '185646': [590, 380], '185647': [590, 406], '185648': [590, 432], '185649': [590, 458],
+            // Rodapé
+            '185601': [40, 650], '185602': [40, 676], '185603': [40, 702], '185604': [40, 728],
+            '185605': [150, 650], '185606': [150, 676], '185607': [150, 702], '185608': [150, 728],
+            '185610': [390, 650], '185611': [390, 676], '185612': [390, 702], '185613': [390, 728],
+            '185615': [650, 650], '185616': [650, 676], '185617': [650, 702], '185618': [650, 728],
+            '185619': [775, 635], '185620': [775, 661], '185621': [775, 687],
+            '185622': [890, 650], '185623': [890, 676], '185624': [890, 702], '185625': [890, 728],
+            // Acima dos cofres
+            '185609': [270, 640], '185614': [520, 640], '202683': [1030, 640],
+            // Centro
+            '202672': [720, 330], '202673': [720, 365], '202674': [720, 480], '202675': [720, 515], '202676': [745, 400],
+            // Cofres
+            '202682': [270, 680], '202681': [520, 680], '202680': [775, 730], '202679': [1030, 680],
+            // Direita
+            '185700': [1150, 40], '202669': [1150, 66], '202670': [1150, 92], '202671': [1150, 118],
+            '185697': [1150, 200], '185698': [1150, 226], '185699': [1150, 252], '202677': [1150, 278],
+            '185694': [1150, 420], '185695': [1150, 446], '185696': [1150, 472], '202678': [1150, 498]
+        };
+
+        const pos = posicoes[prateleiraID];
+        if (pos) {
+            // Calcular o centro da tela e mover o mapa para focar no item
+            const canvasRect = canvas.getBoundingClientRect();
+            const centerX = canvasRect.width / 2;
+            const centerY = canvasRect.height / 2;
+            
+            // Converter coordenadas do mapa para coordenadas da tela
+            const containerScale = Math.min(mapSection.clientWidth / BASE_W, mapSection.clientHeight / BASE_H) * 0.95;
+            const targetX = -(pos[0] * containerScale * scale - centerX);
+            const targetY = -(pos[1] * containerScale * scale - centerY);
+            
+            // Animação suave para mover o mapa
+            const animatePan = () => {
+                const currentX = panX;
+                const currentY = panY;
+                const diffX = targetX - currentX;
+                const diffY = targetY - currentY;
+                
+                if (Math.abs(diffX) > 1 || Math.abs(diffY) > 1) {
+                    panX += diffX * 0.1;
+                    panY += diffY * 0.1;
+                    resize();
+                    requestAnimationFrame(animatePan);
+                } else {
+                    panX = targetX;
+                    panY = targetY;
+                    resize();
+                }
+            };
+            
+            animatePan();
+        }
+    }
     document.getElementById('input-bip').addEventListener('input', (e) => {
         const val = e.target.value.trim();
         if(val.length < 3) {
@@ -331,8 +545,9 @@
             alvoID = item.prateleira;
             etiquetaAtual = val;
             document.getElementById('info-item').classList.remove('hidden');
-            document.getElementById('est-v').innerText = alvoID;
-        } else {
+            document.getElementById('est-v').innerText = alvoID;            
+            // Focar no item encontrado
+            focarItem(item.prateleira);        } else {
             alvoID = null;
             document.getElementById('info-item').classList.add('hidden');
         }
@@ -340,6 +555,7 @@
 
     // FUNÇÃO DE BAIXA (ATUALIZAÇÃO DO SISTEMA)
     async function realizarBaixa() {
+        if (!verificarPermissao('usuario')) return;
         if(!etiquetaAtual) return;
 
         try {
@@ -348,6 +564,9 @@
             querySnapshot.forEach(async (document) => {
                 await window.firebaseDB.collection('estoque').doc(document.id).delete();
             });
+
+            // Registrar auditoria
+            registrarAuditoria('BAIXA_ITEM', `Realizou baixa da etiqueta ${etiquetaAtual} da prateleira ${alvoID}`);
 
             // Remove do cache local
             estoqueCache = estoqueCache.filter(i => String(i.etiqueta) !== etiquetaAtual);
@@ -367,8 +586,8 @@
 
             atualizarContador();
 
-            // Redireciona para o sistema Kabum após a baixa
-            window.location.href = "https://manager.kabum.com.br/cgi-local/expedicao/armazenagem/coletor/sku_setar.cgi?msg=1&erros=";
+            // Abre em nova aba o sistema Kabum após a baixa (não troca a aba atual)
+            window.open("https://manager.kabum.com.br/cgi-local/expedicao/armazenagem/coletor/sku_setar.cgi?msg=1&erros=", '_blank');
         } catch (error) {
             console.error("Erro ao realizar baixa:", error);
             alert("Erro ao remover do servidor. Tente novamente.");
@@ -376,6 +595,8 @@
     }
 
     async function syncExcel(e) {
+        if (!verificarPermissao('admin')) return;
+
         const reader = new FileReader();
         reader.onload = async (ev) => {
             try {
@@ -404,13 +625,17 @@
                         await window.firebaseDB.collection('estoque').add({
                             etiqueta: String(item.etiqueta),
                             prateleira: String(item.prateleira),
-                            dataInsercao: new Date().toISOString()
+                            dataInsercao: new Date().toISOString(),
+                            usuarioInsercao: usuarioAtual.nome
                         });
                         adicionados++;
                     } catch (itemError) {
                         console.error('Erro ao adicionar item:', item, itemError);
                     }
                 }
+
+                // Registrar auditoria
+                registrarAuditoria('IMPORTAR_EXCEL', `Importou ${adicionados} itens via Excel`);
 
                 // Atualiza cache local
                 estoqueCache = [...estoqueCache, ...novosItens];
@@ -429,6 +654,7 @@
     }
 
     function mostrarInserirItem() {
+        if (!verificarPermissao('admin')) return;
         carregarPrateleirasDisponiveis();
         document.getElementById('modal-inserir').classList.remove('hidden');
         document.getElementById('input-etiqueta').focus();
@@ -517,6 +743,8 @@
     }
 
     async function inserirItem() {
+        if (!verificarPermissao('admin')) return;
+
         const etiqueta = document.getElementById('input-etiqueta').value.trim();
         const prateleira = document.getElementById('select-prateleira').value;
 
@@ -536,8 +764,12 @@
             await window.firebaseDB.collection('estoque').add({
                 etiqueta: etiqueta,
                 prateleira: prateleira,
-                dataInsercao: new Date().toISOString()
+                dataInsercao: new Date().toISOString(),
+                usuarioInsercao: usuarioAtual.nome
             });
+
+            // Registrar auditoria
+            registrarAuditoria('INSERIR_ITEM', `Inseriu item ${etiqueta} na prateleira ${prateleira}`);
 
             // Adiciona ao cache local
             estoqueCache.push({ etiqueta: etiqueta, prateleira: prateleira });
@@ -553,6 +785,330 @@
 
     render();
     carregarEstoque();
+
+    function mostrarRelatorios() {
+        if (!verificarPermissao('admin')) return;
+        document.getElementById('modal-relatorios').classList.remove('hidden');
+        document.getElementById('relatorios-content').classList.add('hidden');
+    }
+
+    function fecharRelatorios() {
+        document.getElementById('modal-relatorios').classList.add('hidden');
+        document.getElementById('relatorios-content').innerHTML = '';
+        document.getElementById('relatorios-content').classList.add('hidden');
+        document.getElementById('search-container').classList.add('hidden');
+        document.getElementById('search-etiqueta').value = '';
+        document.getElementById('filtered-content').innerHTML = '';
+    }
+
+    async function exportarExcelRelatorio() {
+        try {
+            const querySnapshot = await window.firebaseDB.collection('estoque').get();
+            const dados = [];
+
+            querySnapshot.docs.forEach(doc => {
+                const data = doc.data();
+                dados.push({
+                    'Etiqueta': data.etiqueta,
+                    'Prateleira': data.prateleira,
+                    'Data Inserção': data.dataInsercao,
+                    'Data Baixa': data.dataBaixa || 'N/A',
+                    'ID Documento': doc.id
+                });
+            });
+
+            if (dados.length === 0) {
+                alert('Nenhum dado encontrado para exportar.');
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(dados);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Relatório Completo');
+            XLSX.writeFile(wb, 'relatorio_estoque_' + new Date().toISOString().split('T')[0] + '.xlsx');
+
+            alert('✅ Relatório exportado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao exportar relatório:', error);
+            alert('Erro ao exportar relatório. Verifique a conexão com Firebase.');
+        }
+    }
+
+    // Sistema de Login e Usuários
+    let usuarioAtual = null;
+    const usuarios = {
+        'lima': { senha: 'lima', tipo: 'admin', nome: 'Lima' },
+        'laisa': { senha: 'laisa123', tipo: 'admin', nome: 'Laisa' },
+        'samuel': { senha: 'samuel123', tipo: 'usuario', nome: 'Samuel' },
+        'rique': { senha: 'rique123', tipo: 'usuario', nome: 'Rique' },
+        'laisa2': { senha: 'laisa123', tipo: 'usuario', nome: 'Laisa' } // Usuário adicional
+    };
+
+    function mostrarLogin() {
+        document.getElementById('login-modal').classList.remove('hidden');
+        document.getElementById('login-usuario').focus();
+    }
+
+    function fazerLogin() {
+        const usuario = document.getElementById('login-usuario').value.trim();
+        const senha = document.getElementById('login-senha').value;
+
+        if (usuarios[usuario] && usuarios[usuario].senha === senha) {
+            usuarioAtual = usuarios[usuario];
+            document.getElementById('login-modal').classList.add('hidden');
+            document.getElementById('login-usuario').value = '';
+            document.getElementById('login-senha').value = '';
+            atualizarInterfaceUsuario();
+            registrarAuditoria('LOGIN', `Usuário ${usuarioAtual.nome} fez login`);
+        } else {
+            alert('Usuário ou senha incorretos!');
+        }
+    }
+
+    function fazerLogout() {
+        registrarAuditoria('LOGOUT', `Usuário ${usuarioAtual.nome} fez logout`);
+        usuarioAtual = null;
+        atualizarInterfaceUsuario();
+        mostrarLogin();
+    }
+
+    function atualizarInterfaceUsuario() {
+        const userInfo = document.getElementById('user-info');
+        const adminButtons = document.querySelectorAll('.admin-only');
+        const userButtons = document.querySelectorAll('.user-only');
+
+        if (usuarioAtual) {
+            userInfo.innerHTML = `
+                <div class="text-white/70 text-xs">
+                    <i data-lucide="user" class="w-3 inline"></i>
+                    ${usuarioAtual.nome} (${usuarioAtual.tipo === 'admin' ? 'Admin' : 'Usuário'})
+                </div>
+                <button onclick="fazerLogout()" class="text-red-400 hover:text-red-300 text-xs">Sair</button>
+            `;
+
+            // Mostrar/ocultar botões baseado no tipo de usuário
+            adminButtons.forEach(btn => {
+                if (usuarioAtual.tipo === 'admin') {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            });
+
+            userButtons.forEach(btn => {
+                if (usuarioAtual.tipo === 'usuario') {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            });
+
+            // Esconder botão de inserir item para usuários limitados
+            if (usuarioAtual.tipo === 'usuario') {
+                document.querySelector('[onclick="mostrarInserirItem()"]').style.display = 'none';
+            } else {
+                document.querySelector('[onclick="mostrarInserirItem()"]').style.display = 'flex';
+            }
+        } else {
+            userInfo.innerHTML = '<div class="text-white/50 text-xs">Não logado</div>';
+            adminButtons.forEach(btn => btn.classList.add('hidden'));
+            userButtons.forEach(btn => btn.classList.add('hidden'));
+        }
+
+        lucide.createIcons();
+    }
+
+    function verificarPermissao(acao) {
+        if (!usuarioAtual) {
+            mostrarLogin();
+            return false;
+        }
+
+        if (acao === 'admin' && usuarioAtual.tipo !== 'admin') {
+            alert('Apenas administradores podem realizar esta ação!');
+            return false;
+        }
+
+        return true;
+    }
+
+    // Sistema de Auditoria
+    async function registrarAuditoria(acao, descricao) {
+        try {
+            await window.firebaseDB.collection('auditoria').add({
+                usuario: usuarioAtual ? usuarioAtual.nome : 'Sistema',
+                tipoUsuario: usuarioAtual ? usuarioAtual.tipo : 'sistema',
+                acao: acao,
+                descricao: descricao,
+                timestamp: new Date().toISOString(),
+                ip: 'localhost' // Em produção, capturaria o IP real
+            });
+        } catch (error) {
+            console.error('Erro ao registrar auditoria:', error);
+        }
+    }
+
+    // Função para remover registro
+    async function removerRegistro(etiqueta) {
+        if (!verificarPermissao('admin')) return;
+
+        if (!confirm(`Tem certeza que deseja remover o registro da etiqueta ${etiqueta}?`)) {
+            return;
+        }
+
+        try {
+            // Encontrar e remover do Firebase
+            const querySnapshot = await window.firebaseDB.collection('estoque').where('etiqueta', '==', etiqueta).get();
+            
+            if (!querySnapshot.empty) {
+                const docRef = querySnapshot.docs[0].ref;
+                await docRef.update({
+                    dataBaixa: new Date().toISOString(),
+                    usuarioBaixa: usuarioAtual.nome
+                });
+
+                // Registrar auditoria
+                registrarAuditoria('REMOVER_REGISTRO', `Removeu registro da etiqueta ${etiqueta} da prateleira ${querySnapshot.docs[0].data().prateleira}`);
+
+                // Atualizar cache local
+                estoqueCache = estoqueCache.filter(item => String(item.etiqueta) !== etiqueta);
+                atualizarContador();
+
+                alert(`✅ Registro ${etiqueta} removido com sucesso!`);
+                
+                // Atualizar a lista se estiver aberta
+                if (!document.getElementById('search-container').classList.contains('hidden')) {
+                    verRegistrosAtuais();
+                }
+            }
+        } catch (error) {
+            console.error('Erro ao remover registro:', error);
+            alert('Erro ao remover registro. Verifique a conexão com Firebase.');
+        }
+    }
+
+    // Função para ver auditoria
+    async function verAuditoria() {
+        try {
+            const querySnapshot = await window.firebaseDB.collection('auditoria').orderBy('timestamp', 'desc').limit(50).get();
+            const content = document.getElementById('relatorios-content');
+            const searchContainer = document.getElementById('search-container');
+            
+            content.innerHTML = '';
+            searchContainer.classList.add('hidden');
+
+            if (querySnapshot.empty) {
+                content.innerHTML = '<p class="text-white text-center">Nenhum registro de auditoria encontrado.</p>';
+            } else {
+                content.innerHTML = '<h4 class="text-white font-bold mb-3">Últimas 50 ações:</h4>';
+                
+                querySnapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    div.className = 'bg-white/10 p-3 rounded-lg mb-2';
+                    div.innerHTML = `
+                        <div class="text-white font-bold text-sm">${data.acao}</div>
+                        <div class="text-gray-300 text-xs">${data.descricao}</div>
+                        <div class="text-gray-400 text-xs">${data.usuario} (${data.tipoUsuario}) - ${new Date(data.timestamp).toLocaleString()}</div>
+                    `;
+                    content.appendChild(div);
+                });
+            }
+
+            content.classList.remove('hidden');
+        } catch (error) {
+            console.error('Erro ao carregar auditoria:', error);
+            alert('Erro ao carregar auditoria. Verifique a conexão com Firebase.');
+        }
+    }
+
+    async function verRegistrosAtuais() {
+        try {
+            const querySnapshot = await window.firebaseDB.collection('estoque').get();
+            const content = document.getElementById('relatorios-content');
+            const searchContainer = document.getElementById('search-container');
+            const searchInput = document.getElementById('search-etiqueta');
+            const filteredContent = document.getElementById('filtered-content');
+            
+            content.innerHTML = '';
+            filteredContent.innerHTML = '';
+            registrosAtuais = [];
+
+            if (querySnapshot.empty) {
+                content.innerHTML = '<p class="text-white text-center">Nenhum registro encontrado.</p>';
+            } else {
+                querySnapshot.docs.forEach(doc => {
+                    const data = doc.data();
+                    if (!data.dataBaixa) { // Apenas registros ativos
+                        registrosAtuais.push(data);
+                    }
+                });
+
+                if (registrosAtuais.length === 0) {
+                    content.innerHTML = '<p class="text-white text-center">Nenhum registro ativo encontrado.</p>';
+                } else {
+                    // Mostrar campo de busca
+                    searchContainer.classList.remove('hidden');
+                    searchInput.value = '';
+                    searchInput.focus();
+                    
+                    // Renderizar todos os registros inicialmente
+                    renderizarRegistros(registrosAtuais);
+                }
+            }
+
+            content.classList.remove('hidden');
+        } catch (error) {
+            console.error('Erro ao carregar registros:', error);
+            alert('Erro ao carregar registros. Verifique a conexão com Firebase.');
+        }
+    }
+
+    function renderizarRegistros(registros) {
+        const filteredContent = document.getElementById('filtered-content');
+        filteredContent.innerHTML = '';
+
+        if (registros.length === 0) {
+            filteredContent.innerHTML = '<p class="text-gray-400 text-center text-sm">Nenhum registro encontrado.</p>';
+            return;
+        }
+
+        registros.forEach(reg => {
+            const div = document.createElement('div');
+            div.className = 'bg-white/10 p-3 rounded-lg relative group';
+            div.innerHTML = `
+                <button onclick="removerRegistro('${reg.etiqueta}')" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                    ×
+                </button>
+                <div class="text-white font-bold pr-8">${reg.etiqueta}</div>
+                <div class="text-gray-300 text-sm">Prateleira: ${reg.prateleira}</div>
+                <div class="text-gray-400 text-xs">Inserido: ${new Date(reg.dataInsercao).toLocaleString()}</div>
+            `;
+            filteredContent.appendChild(div);
+        });
+    }
+
+    // Event listener para busca em tempo real
+    document.getElementById('search-etiqueta').addEventListener('input', (e) => {
+        const searchTerm = e.target.value.trim().toLowerCase();
+        
+        if (searchTerm.length === 0) {
+            renderizarRegistros(registrosAtuais);
+        } else {
+            const filtered = registrosAtuais.filter(reg => 
+                String(reg.etiqueta).toLowerCase().includes(searchTerm) ||
+                String(reg.prateleira).toLowerCase().includes(searchTerm)
+            );
+            renderizarRegistros(filtered);
+        }
+    });
+
+    // Atualizar ícones após adicionar novos elementos
+    lucide.createIcons();
+
+    // Inicializar sistema
+    mostrarLogin();
+    carregarEstoque();
     </script>
 </body>
-</html>
+</html> 
