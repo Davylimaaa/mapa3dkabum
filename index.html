@@ -54,6 +54,28 @@
 
         .qr-btn { position: absolute; right: 10px; top: 38px; z-index: 15; }
         .senha-mask { -webkit-text-security: disc; text-security: disc; }
+
+        /* Status badges */
+        .badge-pendente { background: #f59e0b; color: #000; font-size: 9px; padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+        .badge-alocado { background: #22c55e; color: #000; font-size: 9px; padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+        .badge-baixa { background: #ef4444; color: #fff; font-size: 9px; padding: 2px 8px; border-radius: 999px; font-weight: 800; }
+
+        /* Modal scroll */
+        .modal-scroll { max-height: 70vh; overflow-y: auto; }
+        .modal-scroll::-webkit-scrollbar { width: 6px; }
+        .modal-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        /* Timeline history */
+        .timeline-item { border-left: 2px solid #334155; padding-left: 16px; position: relative; }
+        .timeline-item::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: #ff6500; position: absolute; left: -6px; top: 4px; }
+        .timeline-item.baixa::before { background: #ef4444; }
+        .timeline-item.insert::before { background: #22c55e; }
+        .timeline-item.transit::before { background: #f59e0b; }
+
+        /* Dashboard cards */
+        .dash-card { background: rgba(30,41,59,0.6); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 16px; text-align: center; }
+        .dash-card .dash-num { font-size: 32px; font-weight: 900; font-family: monospace; }
+        .dash-card .dash-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -86,10 +108,19 @@
                 <span class="text-[9px] text-orange-500 font-bold block mb-1 uppercase tracking-tighter">Nicho Selecionado</span>
                 <b id="est-v" class="text-white text-5xl font-mono tracking-tighter">--</b>
             </div>
+            <div id="status-transitorio" class="hidden mt-2 text-center">
+                <span class="badge-pendente">⏳ TRANSITÓRIO - PENDENTE</span>
+            </div>
+            <div id="etiqueta-info-display" class="mt-2 text-center text-white/60 text-xs"></div>
             
-            <button onclick="realizarBaixa()" class="btn-baixa w-full mt-4 text-white font-black py-4 rounded-xl text-[11px] uppercase flex items-center justify-center gap-2 shadow-lg">
-                <i data-lucide="package-check" class="w-4"></i> Confirmar Baixa
-            </button>
+            <div class="flex gap-2 mt-4">
+                <button onclick="abrirModalBaixa()" class="btn-baixa flex-1 text-white font-black py-4 rounded-xl text-[11px] uppercase flex items-center justify-center gap-2 shadow-lg">
+                    <i data-lucide="package-check" class="w-4"></i> Dar Baixa
+                </button>
+                <button onclick="verHistoricoItem(etiquetaAtual)" class="flex-none glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] uppercase flex items-center justify-center gap-2 hover:bg-white/5 transition">
+                    <i data-lucide="history" class="w-4"></i>
+                </button>
+            </div>
         </div>
 
         <div class="mt-auto space-y-3">
@@ -106,9 +137,18 @@
             <button onclick="mostrarRelatorios()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
                 <i data-lucide="file-text" class="w-4 text-purple-500"></i> RELATÓRIOS
             </button>
+            <button onclick="mostrarDashboard()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 logged-only">
+                <i data-lucide="bar-chart-3" class="w-4 text-cyan-500"></i> PAINEL INVENTÁRIO
+            </button>
+            <button onclick="verPendentesTransitorio()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 logged-only">
+                <i data-lucide="clock" class="w-4 text-yellow-500"></i> ITENS TRANSITÓRIOS
+            </button>
+            <button onclick="backupExcel()" class="w-full glass px-4 py-4 rounded-xl text-white/70 font-bold text-[11px] flex items-center justify-center gap-2 hover:bg-white/5 transition border-dashed border border-slate-700 admin-only">
+                <i data-lucide="hard-drive-download" class="w-4 text-emerald-500"></i> BACKUP EXCEL
+            </button>
             <div class="flex justify-between items-center px-2">
                 <p id="status-db" class="text-[8px] text-slate-500 uppercase font-bold">Base de dados vazia</p>
-                <p class="text-[8px] text-slate-600 uppercase font-bold">v8.2 FINAL</p>
+                <p class="text-[8px] text-slate-600 uppercase font-bold">v9.0</p>
             </div>
         </div>
     </div>
@@ -213,6 +253,176 @@
         </div>
     </div>
 
+    <!-- Modal de Dar Baixa (com controle) -->
+    <div id="modal-baixa" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-96 space-y-4 modal-scroll">
+            <h3 class="text-white font-bold text-lg uppercase flex items-center gap-2">
+                <i data-lucide="package-check" class="w-5 text-red-500"></i> Confirmar Baixa
+            </h3>
+            <div class="bg-orange-600/10 p-3 rounded-xl border border-orange-500/20 text-center">
+                <span class="text-[9px] text-orange-500 font-bold uppercase">Etiqueta</span>
+                <p id="baixa-etiqueta" class="text-white font-mono font-bold text-2xl"></p>
+                <span class="text-[9px] text-orange-500 font-bold uppercase">Prateleira</span>
+                <p id="baixa-prateleira" class="text-white font-mono font-bold text-lg"></p>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Responsável por tirar</label>
+                    <select id="baixa-quem-retirou" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                        <option value="">Selecione quem retirou...</option>
+                        <option value="Laisa">Laisa</option>
+                        <option value="Samuel">Samuel</option>
+                        <option value="Davy">Davy</option>
+                        <option value="Henrique">Henrique</option>
+                        <option value="Edilson">Edilson</option>
+                        <option value="Vinicius">Vinicius</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Vendedor que solicitou</label>
+                    <input type="text" id="baixa-vendedor" placeholder="Nome do vendedor..." 
+                           class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Motivo da retirada</label>
+                    <select id="baixa-motivo" class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                        <option value="">Selecione o motivo...</option>
+                        <option value="Venda">Venda</option>
+                        <option value="Devolução">Devolução ao fornecedor</option>
+                        <option value="Transferência">Transferência</option>
+                        <option value="Defeito">Defeito / Avaria</option>
+                        <option value="Inventário">Ajuste de Inventário</option>
+                        <option value="Outro">Outro</option>
+                    </select>
+                </div>
+                <div id="baixa-motivo-outro-container" class="hidden">
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Especifique o motivo</label>
+                    <input type="text" id="baixa-motivo-outro" placeholder="Descreva o motivo..." 
+                           class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                </div>
+                <div>
+                    <label class="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Onde foi alocado no GK?</label>
+                    <input type="text" id="baixa-alocacao-gk" placeholder="Local no GK..." 
+                           class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold">
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="confirmarBaixaFinal()" class="btn-baixa flex-1 text-white font-black py-3 rounded-xl text-[11px] uppercase flex items-center justify-center gap-2">
+                    <i data-lucide="check-circle" class="w-4"></i> CONFIRMAR BAIXA
+                </button>
+                <button onclick="fecharModalBaixa()" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 rounded-xl text-sm">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Histórico do Item -->
+    <div id="modal-historico" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-[28rem] space-y-4 modal-scroll">
+            <h3 class="text-white font-bold text-lg uppercase flex items-center gap-2">
+                <i data-lucide="history" class="w-5 text-blue-500"></i> Histórico do Item
+            </h3>
+            <div class="bg-blue-600/10 p-3 rounded-xl border border-blue-500/20 text-center">
+                <span class="text-[9px] text-blue-500 font-bold uppercase">Etiqueta</span>
+                <p id="historico-etiqueta" class="text-white font-mono font-bold text-2xl"></p>
+            </div>
+            <div id="historico-timeline" class="space-y-4 py-2"></div>
+            <button onclick="document.getElementById('modal-historico').classList.add('hidden')" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal de Prateleira (ao clicar no mapa) -->
+    <div id="modal-prateleira-view" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-[28rem] space-y-4 modal-scroll">
+            <h3 class="text-white font-bold text-lg uppercase flex items-center gap-2">
+                <i data-lucide="archive" class="w-5 text-orange-500"></i> Prateleira <span id="pv-prateleira-id" class="text-[#ff6500]"></span>
+            </h3>
+            <div class="flex gap-3">
+                <div class="dash-card flex-1">
+                    <div id="pv-total" class="dash-num text-[#ff6500]">0</div>
+                    <div class="dash-label">Itens alocados</div>
+                </div>
+            </div>
+            <div>
+                <input type="text" id="pv-busca" placeholder="Buscar etiqueta nesta prateleira..." 
+                       class="w-full bg-slate-900 border border-slate-700 p-3 rounded-xl text-white outline-none focus:ring-2 focus:ring-[#ff6500] font-bold text-sm">
+            </div>
+            <div id="pv-lista" class="space-y-2 max-h-60 overflow-y-auto"></div>
+            <button onclick="document.getElementById('modal-prateleira-view').classList.add('hidden')" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Modal Dashboard / Painel de Inventário -->
+    <div id="modal-dashboard" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-[32rem] space-y-4 modal-scroll">
+            <h3 class="text-white font-bold text-lg uppercase flex items-center gap-2">
+                <i data-lucide="bar-chart-3" class="w-5 text-cyan-500"></i> Painel de Inventário
+            </h3>
+            <p class="text-yellow-400 text-xs font-bold">📅 Inventário programado: 13 de Abril</p>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="dash-card">
+                    <div id="dash-total" class="dash-num text-white">0</div>
+                    <div class="dash-label">Total Itens</div>
+                </div>
+                <div class="dash-card">
+                    <div id="dash-prateleiras" class="dash-num text-green-400">0</div>
+                    <div class="dash-label">Prateleiras Usadas</div>
+                </div>
+                <div class="dash-card">
+                    <div id="dash-transitorios" class="dash-num text-yellow-400">0</div>
+                    <div class="dash-label">Transitórios</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="dash-card">
+                    <div id="dash-baixas-hoje" class="dash-num text-red-400">0</div>
+                    <div class="dash-label">Baixas Hoje</div>
+                </div>
+                <div class="dash-card">
+                    <div id="dash-inseridos-hoje" class="dash-num text-blue-400">0</div>
+                    <div class="dash-label">Inseridos Hoje</div>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <h4 class="text-white font-bold text-sm uppercase">Top 5 Prateleiras (mais cheias)</h4>
+                <div id="dash-top-prateleiras" class="space-y-1"></div>
+            </div>
+            <div class="space-y-2">
+                <h4 class="text-white font-bold text-sm uppercase">Prateleiras Vazias</h4>
+                <div id="dash-prateleiras-vazias" class="text-slate-400 text-xs max-h-20 overflow-y-auto"></div>
+            </div>
+            <div class="space-y-2">
+                <h4 class="text-white font-bold text-sm uppercase flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-4 text-yellow-500"></i> Dicas para o Inventário
+                </h4>
+                <div class="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-3 text-xs text-yellow-200 space-y-1">
+                    <p>• Confira itens <strong>transitórios</strong> (185595) — devem ser alocados antes do inventário</p>
+                    <p>• Exporte o <strong>Excel completo</strong> antes do inventário como backup</p>
+                    <p>• Use o <strong>scanner</strong> para verificar cada prateleira no dia</p>
+                    <p>• Itens com histórico de <strong>divergência</strong> serão marcados em vermelho</p>
+                    <p>• Compare o total do sistema com a contagem física prateleira por prateleira</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="exportarRelatorioInventario()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-[11px] uppercase flex items-center justify-center gap-2">
+                    <i data-lucide="download" class="w-4"></i> Exportar p/ Inventário
+                </button>
+                <button onclick="document.getElementById('modal-dashboard').classList.add('hidden')" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Itens Transitórios -->
+    <div id="modal-transitorios" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-50">
+        <div class="glass p-6 rounded-3xl w-[28rem] space-y-4 modal-scroll">
+            <h3 class="text-white font-bold text-lg uppercase flex items-center gap-2">
+                <i data-lucide="clock" class="w-5 text-yellow-500"></i> Itens Transitórios (185595)
+            </h3>
+            <p class="text-yellow-400 text-xs">Itens aguardando alocação definitiva — devem ser resolvidos antes do inventário.</p>
+            <div id="transitorios-lista" class="space-y-2 max-h-96 overflow-y-auto"></div>
+            <button onclick="document.getElementById('modal-transitorios').classList.add('hidden')" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 rounded-xl">Fechar</button>
+        </div>
+    </div>
+
     <script>
     lucide.createIcons();
     const canvas = document.getElementById('log-canvas');
@@ -249,7 +459,7 @@
     }
 
     // Proporção do Mapa
-    const BASE_W = 1800; // Aumentado de 1250 para 1800
+    const BASE_W = 2100; // Expandido para caber rua transitória
     const BASE_H = 1200; // Aumentado de 850 para 1200
 
     // Variáveis para pan e zoom
@@ -525,6 +735,60 @@
         ctx.fillStyle = '#020617';
         ctx.fillRect(0, 0, BASE_W, BASE_H);
 
+        // --- RUA TRANSITÓRIA (extrema direita, distante) ---
+        ctx.save();
+        ctx.fillStyle = '#f59e0b20';
+        ctx.strokeStyle = '#f59e0b40';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]);
+        ctx.beginPath();
+        ctx.roundRect(1550 - 15, 30, 130, 780, 16);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+        // Label da rua
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 14px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('TRANSITÓRIO', 1615, 25);
+        ctx.font = 'bold 10px Inter';
+        ctx.fillStyle = '#f59e0b80';
+        ctx.fillText('Itens pendentes de alocação', 1615, 820);
+
+        // Prateleira transitória desenhada com estilo especial
+        const transitIDs = [185595];
+        const txBase = 1570;
+        // Conta itens transitórios
+        const itensTransit = estoqueCache.filter(it => String(it.prateleira) === '185595');
+        // Desenha prateleira grande para transitório
+        const tW = 90, tH = 700;
+        const tActive = String(alvoID) === '185595';
+        ctx.fillStyle = tActive ? '#ff6500' : 'rgba(245,158,11,0.15)';
+        ctx.strokeStyle = tActive ? '#fff' : '#f59e0b60';
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = tActive ? 20 : 0;
+        ctx.shadowColor = '#ff6500';
+        ctx.beginPath(); ctx.roundRect(txBase, 40, tW, tH, 8); ctx.fill(); ctx.stroke();
+        ctx.shadowBlur = 0;
+        // ID
+        ctx.fillStyle = tActive ? '#fff' : '#f59e0b';
+        ctx.font = 'bold 16px Inter'; ctx.textAlign = 'center';
+        ctx.fillText('185595', txBase + tW/2, 80);
+        // Contagem
+        ctx.font = 'bold 40px Inter';
+        ctx.fillStyle = tActive ? '#fff' : '#f59e0bcc';
+        ctx.fillText(itensTransit.length, txBase + tW/2, 420);
+        ctx.font = 'bold 10px Inter';
+        ctx.fillStyle = '#f59e0b90';
+        ctx.fillText('itens', txBase + tW/2, 440);
+        // Ícone pendente
+        if (itensTransit.length > 0) {
+            ctx.font = 'bold 12px Inter';
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillText('⏳ PENDENTE', txBase + tW/2, 480);
+        }
+
         // --- PRATELEIRAS ESQUERDA ---
         for(let i=0; i<5; i++) drawShelf(40 + (i * 110), 40, [185674+(i*4), 185675+(i*4), 185676+(i*4), 185677+(i*4)]);
         for(let i=0; i<6; i++) drawShelf(40 + (i * 110), 200, [185650+(i*4), 185651+(i*4), 185652+(i*4), 185653+(i*4)]);
@@ -615,7 +879,9 @@
             // Direita
             '185700': [1150, 40], '202669': [1150, 66], '202670': [1150, 92], '202671': [1150, 118],
             '185697': [1150, 200], '185698': [1150, 226], '185699': [1150, 252], '202677': [1150, 278],
-            '185694': [1150, 420], '185695': [1150, 446], '185696': [1150, 472], '202678': [1150, 498]
+            '185694': [1150, 420], '185695': [1150, 446], '185696': [1150, 472], '202678': [1150, 498],
+            // Transitório
+            '185595': [1570, 40]
         };
 
         const pos = posicoes[prateleiraID];
@@ -674,6 +940,14 @@
             etiquetaAtual = String(item.etiqueta).trim();
             document.getElementById('info-item').classList.remove('hidden');
             document.getElementById('est-v').innerText = alvoID;
+            document.getElementById('etiqueta-info-display').innerText = 'Etiqueta: ' + etiquetaAtual;
+            // Mostrar status transitório se prateleira é 185595
+            const transitEl = document.getElementById('status-transitorio');
+            if (alvoID === '185595') {
+                transitEl.classList.remove('hidden');
+            } else {
+                transitEl.classList.add('hidden');
+            }
             focarItem(alvoID);
         } else {
             alvoID = null;
@@ -681,10 +955,52 @@
         }
     });
 
-    // FUNÇÃO DE BAIXA (ATUALIZAÇÃO DO SISTEMA)
-    async function realizarBaixa() {
+    // FUNÇÃO DE BAIXA - Abre modal com controle
+    function abrirModalBaixa() {
         if (!verificarPermissao('usuario')) return;
-        if(!etiquetaAtual) return;
+        if (!etiquetaAtual) return;
+
+        document.getElementById('baixa-etiqueta').innerText = etiquetaAtual;
+        document.getElementById('baixa-prateleira').innerText = alvoID;
+        document.getElementById('baixa-quem-retirou').value = '';
+        document.getElementById('baixa-vendedor').value = '';
+        document.getElementById('baixa-motivo').value = '';
+        document.getElementById('baixa-motivo-outro').value = '';
+        document.getElementById('baixa-motivo-outro-container').classList.add('hidden');
+        document.getElementById('baixa-alocacao-gk').value = '';
+        document.getElementById('modal-baixa').classList.remove('hidden');
+        document.getElementById('baixa-quem-retirou').focus();
+    }
+
+    function fecharModalBaixa() {
+        document.getElementById('modal-baixa').classList.add('hidden');
+    }
+
+    // Listener para motivo "Outro"
+    document.getElementById('baixa-motivo').addEventListener('change', function() {
+        const outroContainer = document.getElementById('baixa-motivo-outro-container');
+        if (this.value === 'Outro') {
+            outroContainer.classList.remove('hidden');
+            document.getElementById('baixa-motivo-outro').focus();
+        } else {
+            outroContainer.classList.add('hidden');
+        }
+    });
+
+    async function confirmarBaixaFinal() {
+        const quemRetirou = document.getElementById('baixa-quem-retirou').value.trim();
+        const vendedor = document.getElementById('baixa-vendedor').value.trim();
+        let motivo = document.getElementById('baixa-motivo').value;
+        const alocacaoGK = document.getElementById('baixa-alocacao-gk').value.trim();
+
+        if (!quemRetirou) { alert('Preencha quem retirou o item!'); return; }
+        if (!vendedor) { alert('Preencha o vendedor que solicitou!'); return; }
+        if (!motivo) { alert('Selecione o motivo!'); return; }
+        if (motivo === 'Outro') {
+            motivo = document.getElementById('baixa-motivo-outro').value.trim();
+            if (!motivo) { alert('Descreva o motivo!'); return; }
+        }
+        if (!alocacaoGK) { alert('Preencha onde foi alocado no GK!'); return; }
 
         try {
             // Remove do Firebase
@@ -693,25 +1009,34 @@
                 await window.firebaseDB.collection('estoque').doc(document.id).delete();
             });
 
+            // Salvar no histórico
+            await window.firebaseDB.collection('historico').add({
+                etiqueta: etiquetaAtual,
+                prateleira: alvoID,
+                acao: 'BAIXA',
+                quemRetirou: quemRetirou,
+                vendedor: vendedor,
+                motivo: motivo,
+                alocacaoGK: alocacaoGK,
+                usuario: usuarioAtual.nome,
+                tipoUsuario: usuarioAtual.tipo,
+                timestamp: new Date().toISOString()
+            });
+
             // Registrar auditoria
-            registrarAuditoria('BAIXA_ITEM', `Realizou baixa da etiqueta ${etiquetaAtual} da prateleira ${alvoID}`);
+            registrarAuditoria('BAIXA_ITEM', `Baixa etiqueta ${etiquetaAtual} | Prateleira: ${alvoID} | Retirado por: ${quemRetirou} | Vendedor: ${vendedor} | Motivo: ${motivo} | GK: ${alocacaoGK}`);
 
             // Remove do cache local
             estoqueCache = estoqueCache.filter(i => String(i.etiqueta) !== etiquetaAtual);
-
-            // Salva no localStorage como backup
             localStorage.setItem('estoqueCache', JSON.stringify(estoqueCache));
-            localStorage.setItem('ultimaBaixa', JSON.stringify({ etiqueta: etiquetaAtual, prateleira: alvoID, data: new Date().toISOString() }));
+            localStorage.setItem('ultimaBaixa', JSON.stringify({ etiqueta: etiquetaAtual, prateleira: alvoID, quemRetirou, vendedor, motivo, alocacaoGK, data: new Date().toISOString() }));
 
-            // Reseta interface
             const etiquetaCopiar = etiquetaAtual;
-            alert("✅ BAIXA REALIZADA: Etiqueta " + etiquetaAtual + " removida do estoque.\n\nEtiqueta copiada para a área de transferência!");
 
-            // Copia etiqueta para o clipboard (Ctrl+V no próximo site)
+            // Copia etiqueta para clipboard
             try {
                 await navigator.clipboard.writeText(etiquetaCopiar);
             } catch(clipErr) {
-                // Fallback para navegadores que bloqueiam clipboard
                 const tmp = document.createElement('textarea');
                 tmp.value = etiquetaCopiar;
                 document.body.appendChild(tmp);
@@ -720,19 +1045,356 @@
                 document.body.removeChild(tmp);
             }
 
+            // Fecha modal e reseta interface
+            fecharModalBaixa();
+            alert("✅ BAIXA REALIZADA!\n\nEtiqueta: " + etiquetaCopiar + "\nRetirado por: " + quemRetirou + "\nVendedor: " + vendedor + "\nMotivo: " + motivo + "\nAlocação GK: " + alocacaoGK + "\n\nEtiqueta copiada para a área de transferência!");
+
             etiquetaAtual = null;
             alvoID = null;
             document.getElementById('input-bip').value = '';
             document.getElementById('info-item').classList.add('hidden');
             document.getElementById('input-bip').focus();
-
             atualizarContador();
 
-            // Abre em nova aba o sistema Kabum após a baixa (não troca a aba atual)
+            // Abre o link de alocação após a baixa
             window.open("https://manager.kabum.com.br/cgi-local/expedicao/armazenagem/coletor/sku_setar.cgi?msg=1&erros=", '_blank');
         } catch (error) {
             console.error("Erro ao realizar baixa:", error);
             alert("Erro ao remover do servidor. Tente novamente.");
+        }
+    }
+
+    // ========== HISTÓRICO DO ITEM ==========
+    async function verHistoricoItem(etiqueta) {
+        if (!etiqueta) return;
+        // Fechar outros modals antes de abrir o histórico
+        document.getElementById('modal-prateleira-view').classList.add('hidden');
+        document.getElementById('modal-transitorios').classList.add('hidden');
+        document.getElementById('modal-relatorios').classList.add('hidden');
+
+        document.getElementById('historico-etiqueta').innerText = etiqueta;
+        const timeline = document.getElementById('historico-timeline');
+        timeline.innerHTML = '<p class="text-slate-400 text-sm text-center">Carregando...</p>';
+        document.getElementById('modal-historico').classList.remove('hidden');
+
+        try {
+            // Buscar histórico no Firebase
+            let histDocs = [];
+            try {
+                const histSnap = await window.firebaseDB.collection('historico').where('etiqueta', '==', etiqueta).get();
+                histDocs = histSnap.docs.sort((a, b) => (b.data().timestamp || '').localeCompare(a.data().timestamp || ''));
+            } catch(e) {
+                console.warn('Collection historico não encontrada ou sem permissão:', e);
+                // Continua sem histórico - não é erro fatal
+            }
+            
+            // Buscar se item ainda existe no estoque
+            const estoqueSnap = await window.firebaseDB.collection('estoque').where('etiqueta', '==', etiqueta).get();
+
+            timeline.innerHTML = '';
+
+            // Status atual
+            if (!estoqueSnap.empty) {
+                const itemData = estoqueSnap.docs[0].data();
+                const div = document.createElement('div');
+                div.className = 'timeline-item insert mb-4';
+                const isTransit = String(itemData.prateleira) === '185595';
+                div.innerHTML = `
+                    <div class="text-green-400 font-bold text-sm">📦 Atualmente em estoque</div>
+                    <div class="text-white text-xs">Prateleira: <strong>${itemData.prateleira}</strong></div>
+                    ${isTransit ? '<span class="badge-pendente mt-1 inline-block">⏳ TRANSITÓRIO</span>' : '<span class="badge-alocado mt-1 inline-block">✅ ALOCADO</span>'}
+                    ${itemData.dataInsercao ? '<div class="text-slate-500 text-[10px] mt-1">Inserido: ' + new Date(itemData.dataInsercao).toLocaleString() + '</div>' : ''}
+                    ${itemData.usuarioInsercao ? '<div class="text-slate-500 text-[10px]">Por: ' + itemData.usuarioInsercao + '</div>' : ''}
+                `;
+                timeline.appendChild(div);
+            } else {
+                const div = document.createElement('div');
+                div.className = 'timeline-item baixa mb-4';
+                div.innerHTML = `<div class="text-red-400 font-bold text-sm">❌ Item não está mais no estoque</div>`;
+                timeline.appendChild(div);
+            }
+
+            // Eventos do histórico
+            if (histDocs.length === 0 && !estoqueSnap.empty) {
+                // Item existe mas não tem histórico - mostra dados de alocação do estoque
+                const itemData = estoqueSnap.docs[0].data();
+                const noHistDiv = document.createElement('div');
+                noHistDiv.className = 'timeline-item insert mb-4';
+                const quemAlocou = itemData.usuarioInsercao ? itemData.usuarioInsercao : (itemData.dataInsercao ? 'Não registrado' : 'Lima');
+                noHistDiv.innerHTML = `
+                    <div class="text-green-400 font-bold text-sm">📦 Alocado por ${quemAlocou}</div>
+                    <div class="text-white text-xs">Prateleira: <strong>${itemData.prateleira}</strong></div>
+                    ${itemData.dataInsercao ? '<div class="text-slate-300 text-xs">Data: <strong>' + new Date(itemData.dataInsercao).toLocaleString() + '</strong></div>' : ''}
+                    <div class="text-slate-400 text-[10px] mt-1">Registro anterior ao sistema de histórico</div>
+                `;
+                timeline.appendChild(noHistDiv);
+            } else if (histDocs.length === 0 && estoqueSnap.empty) {
+                timeline.innerHTML += '<p class="text-slate-500 text-sm text-center mt-4">Nenhum registro encontrado para esta etiqueta.</p>';
+            } else {
+                histDocs.forEach(doc => {
+                    const data = doc.data();
+                    const div = document.createElement('div');
+                    const isBaixa = data.acao === 'BAIXA';
+                    div.className = 'timeline-item ' + (isBaixa ? 'baixa' : 'insert') + ' mb-4';
+                    div.innerHTML = `
+                        <div class="${isBaixa ? 'text-red-400' : 'text-green-400'} font-bold text-sm">${data.acao}</div>
+                        <div class="text-white text-xs">Prateleira: ${data.prateleira || '—'}</div>
+                        ${data.quemRetirou ? '<div class="text-slate-300 text-xs">Retirado por: <strong>' + data.quemRetirou + '</strong></div>' : ''}
+                        ${data.vendedor ? '<div class="text-slate-300 text-xs">Vendedor: <strong>' + data.vendedor + '</strong></div>' : ''}
+                        ${data.motivo ? '<div class="text-slate-300 text-xs">Motivo: <strong>' + data.motivo + '</strong></div>' : ''}
+                        ${data.alocacaoGK ? '<div class="text-slate-300 text-xs">Alocação GK: <strong>' + data.alocacaoGK + '</strong></div>' : ''}
+                        <div class="text-slate-500 text-[10px] mt-1">${data.usuario || 'Sistema'} — ${new Date(data.timestamp).toLocaleString()}</div>
+                    `;
+                    timeline.appendChild(div);
+                });
+            }
+        } catch (error) {
+            console.error('Erro ao buscar histórico:', error);
+            timeline.innerHTML = '<p class="text-red-400 text-sm text-center">Erro ao carregar dados. Verifique a conexão com o Firebase.</p>';
+        }
+
+        lucide.createIcons();
+    }
+
+    // ========== VISUALIZAR PRATELEIRA (clique no mapa) ==========
+    function mostrarItensPrateleira(prateleiraID) {
+        const itens = estoqueCache.filter(it => String(it.prateleira) === String(prateleiraID));
+        document.getElementById('pv-prateleira-id').innerText = prateleiraID;
+        document.getElementById('pv-total').innerText = itens.length;
+        
+        const lista = document.getElementById('pv-lista');
+        document.getElementById('pv-busca').value = '';
+        
+        renderizarItensPrateleira(itens);
+        document.getElementById('modal-prateleira-view').classList.remove('hidden');
+    }
+
+    function renderizarItensPrateleira(itens) {
+        const lista = document.getElementById('pv-lista');
+        lista.innerHTML = '';
+        if (itens.length === 0) {
+            lista.innerHTML = '<p class="text-slate-500 text-sm text-center">Nenhum item nesta prateleira</p>';
+            return;
+        }
+        itens.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'bg-white/10 p-3 rounded-lg flex items-center justify-between group cursor-pointer hover:bg-white/20 transition';
+            div.innerHTML = `
+                <div>
+                    <div class="text-white font-bold text-sm">${item.etiqueta}</div>
+                    <div class="text-slate-400 text-[10px]">${item.dataInsercao ? new Date(item.dataInsercao).toLocaleString() : ''}</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="verHistoricoItem('${item.etiqueta}')" class="text-blue-400 hover:text-blue-300 text-xs font-bold">Histórico</button>
+                </div>
+            `;
+            lista.appendChild(div);
+        });
+    }
+
+    // Busca dentro da prateleira
+    document.getElementById('pv-busca').addEventListener('input', function() {
+        const pratID = document.getElementById('pv-prateleira-id').innerText;
+        const busca = this.value.trim().toLowerCase();
+        let itens = estoqueCache.filter(it => String(it.prateleira) === pratID);
+        if (busca) {
+            itens = itens.filter(it => String(it.etiqueta).toLowerCase().includes(busca));
+        }
+        renderizarItensPrateleira(itens);
+    });
+
+    // ========== CLIQUE NO CANVAS PARA ABRIR PRATELEIRA ==========
+    // Mapeamento de regiões clicáveis das prateleiras
+    function getShelfRegions() {
+        const regions = [];
+        const sW = 95, sH = 26, gap = 4;
+
+        // Helper para adicionar regiões de drawShelf
+        function addShelfRegion(x, y, ids) {
+            const fullH = ids.length * (sH + gap) - gap;
+            // Região inteira da prateleira
+            ids.forEach(id => {
+                regions.push({ x: x - 8, y: y - 8, w: sW + 16, h: fullH + 16, id: String(id) });
+            });
+        }
+
+        // Prateleiras esquerda
+        for(let i=0; i<5; i++) addShelfRegion(40 + (i*110), 40, [185674+(i*4), 185675+(i*4), 185676+(i*4), 185677+(i*4)]);
+        for(let i=0; i<6; i++) addShelfRegion(40 + (i*110), 200, [185650+(i*4), 185651+(i*4), 185652+(i*4), 185653+(i*4)]);
+        for(let i=0; i<6; i++) addShelfRegion(40 + (i*110), 380, [185626+(i*4), 185627+(i*4), 185628+(i*4), 185629+(i*4)]);
+
+        // Rodapé
+        [[40,650,[185601,185602,185603,185604]], [150,650,[185605,185606,185607,185608]], 
+         [390,650,[185610,185611,185612,185613]], [650,650,[185615,185616,185617,185618]],
+         [775,635,[185619,185620,185621]], [890,650,[185622,185623,185624,185625]]
+        ].forEach(([x,y,ids]) => addShelfRegion(x,y,ids));
+
+        // Transitório
+        regions.push({ x: 1570, y: 40, w: 90, h: 700, id: '185595' });
+
+        return regions;
+    }
+
+    canvas.addEventListener('click', function(e) {
+        if (isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const containerScale = getContainerScale();
+        // Converter coordenadas da tela para coordenadas do mapa
+        const worldX = (mx - panX) / (containerScale * scale);
+        const worldY = (my - panY) / (containerScale * scale);
+
+        const regions = getShelfRegions();
+        for (const r of regions) {
+            if (worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h) {
+                mostrarItensPrateleira(r.id);
+                return;
+            }
+        }
+    });
+
+    // ========== DASHBOARD / PAINEL DE INVENTÁRIO ==========
+    async function mostrarDashboard() {
+        if (!verificarPermissao('usuario')) return;
+        document.getElementById('modal-dashboard').classList.remove('hidden');
+
+        // Total itens
+        document.getElementById('dash-total').innerText = estoqueCache.length;
+
+        // Prateleiras usadas
+        const pratUsadas = new Set(estoqueCache.map(it => String(it.prateleira)));
+        document.getElementById('dash-prateleiras').innerText = pratUsadas.size;
+
+        // Transitórios
+        const transitorios = estoqueCache.filter(it => String(it.prateleira) === '185595');
+        document.getElementById('dash-transitorios').innerText = transitorios.length;
+
+        // Baixas e inseridos hoje
+        const hoje = new Date().toISOString().split('T')[0];
+        try {
+            const audSnap = await window.firebaseDB.collection('auditoria')
+                .where('timestamp', '>=', hoje + 'T00:00:00')
+                .where('timestamp', '<=', hoje + 'T23:59:59')
+                .get();
+            
+            let baixasHoje = 0, inseridosHoje = 0;
+            audSnap.docs.forEach(doc => {
+                const d = doc.data();
+                if (d.acao === 'BAIXA_ITEM') baixasHoje++;
+                if (d.acao === 'INSERIR_ITEM') inseridosHoje++;
+            });
+            document.getElementById('dash-baixas-hoje').innerText = baixasHoje;
+            document.getElementById('dash-inseridos-hoje').innerText = inseridosHoje;
+        } catch(e) {
+            console.error('Erro ao buscar auditoria do dia:', e);
+        }
+
+        // Top 5 prateleiras mais cheias
+        const contagem = {};
+        estoqueCache.forEach(it => {
+            const p = String(it.prateleira);
+            contagem[p] = (contagem[p] || 0) + 1;
+        });
+        const sorted = Object.entries(contagem).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const topEl = document.getElementById('dash-top-prateleiras');
+        topEl.innerHTML = '';
+        sorted.forEach(([prat, qtd]) => {
+            const maxBar = sorted[0][1];
+            const pct = (qtd / maxBar * 100);
+            const isTransit = prat === '185595';
+            topEl.innerHTML += `
+                <div class="flex items-center gap-2">
+                    <span class="text-white font-mono text-xs w-16">${prat}</span>
+                    <div class="flex-1 bg-slate-800 rounded-full h-4 overflow-hidden">
+                        <div class="h-full rounded-full ${isTransit ? 'bg-yellow-500' : 'bg-[#ff6500]'}" style="width:${pct}%"></div>
+                    </div>
+                    <span class="text-white font-bold text-xs w-8 text-right">${qtd}</span>
+                    ${isTransit ? '<span class="badge-pendente">!</span>' : ''}
+                </div>
+            `;
+        });
+
+        // Prateleiras vazias
+        const todasPrat = Array.from(prateleirasMapa);
+        const vazias = todasPrat.filter(p => !pratUsadas.has(p));
+        const vaziasEl = document.getElementById('dash-prateleiras-vazias');
+        if (vazias.length === 0) {
+            vaziasEl.innerHTML = '<p class="text-green-400">Todas as prateleiras estão em uso!</p>';
+        } else {
+            vaziasEl.innerHTML = vazias.map(v => `<span class="inline-block bg-slate-800 px-2 py-1 rounded text-[10px] font-mono mr-1 mb-1">${v}</span>`).join('');
+        }
+
+        lucide.createIcons();
+    }
+
+    // ========== ITENS TRANSITÓRIOS ==========
+    function verPendentesTransitorio() {
+        if (!verificarPermissao('usuario')) return;
+        const itens = estoqueCache.filter(it => String(it.prateleira) === '185595');
+        const lista = document.getElementById('transitorios-lista');
+        lista.innerHTML = '';
+
+        if (itens.length === 0) {
+            lista.innerHTML = '<p class="text-green-400 text-sm text-center">Nenhum item transitório! Tudo alocado.</p>';
+        } else {
+            itens.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg flex items-center justify-between';
+                div.innerHTML = `
+                    <div>
+                        <div class="text-white font-bold text-sm">${item.etiqueta}</div>
+                        <div class="text-yellow-400 text-[10px]">⏳ Pendente de alocação</div>
+                        ${item.dataInsercao ? '<div class="text-slate-500 text-[10px]">Desde: ' + new Date(item.dataInsercao).toLocaleString() + '</div>' : ''}
+                    </div>
+                    <button onclick="verHistoricoItem('${item.etiqueta}')" class="text-blue-400 hover:text-blue-300 text-xs font-bold">Histórico</button>
+                `;
+                lista.appendChild(div);
+            });
+        }
+
+        document.getElementById('modal-transitorios').classList.remove('hidden');
+    }
+
+    // ========== EXPORTAR RELATÓRIO PARA INVENTÁRIO ==========
+    async function exportarRelatorioInventario() {
+        try {
+            const dados = [];
+            // Agrupar por prateleira
+            const porPrateleira = {};
+            estoqueCache.forEach(it => {
+                const p = String(it.prateleira);
+                if (!porPrateleira[p]) porPrateleira[p] = [];
+                porPrateleira[p].push(it);
+            });
+
+            // Para cada prateleira, listar itens
+            Object.keys(porPrateleira).sort().forEach(prat => {
+                porPrateleira[prat].forEach(item => {
+                    dados.push({
+                        'Prateleira': prat,
+                        'Etiqueta': item.etiqueta,
+                        'Status': prat === '185595' ? 'TRANSITÓRIO' : 'ALOCADO',
+                        'Data Inserção': item.dataInsercao || '',
+                        'Conferido': '', // coluna em branco para preencher no inventário
+                        'Observação': ''
+                    });
+                });
+            });
+
+            if (dados.length === 0) {
+                alert('Nenhum dado para exportar.');
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(dados);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Inventário');
+            XLSX.writeFile(wb, 'inventario_' + new Date().toISOString().split('T')[0] + '.xlsx');
+            alert('✅ Relatório de inventário exportado!');
+        } catch (error) {
+            console.error('Erro ao exportar inventário:', error);
+            alert('Erro ao exportar. Verifique o console.');
         }
     }
 
@@ -807,7 +1469,8 @@
         185694,185695,185696,202678,
         202682,202681,202680,202679,202683,
         202672,202673,202674,202675,202676,
-        185609,185614
+        185609,185614,
+        185595
     ].map(String));
 
     function mostrarInserirItem() {
@@ -864,7 +1527,7 @@
         }
         if (!etiqueta) return;
 
-        // Verifica se já existe
+        // Verifica se já exist. e n sei nem como eu consegui mas consegui 
         if (estoqueCache.find(i => String(i.etiqueta) === etiqueta)) {
             const statusEl = document.getElementById('inserir-status');
             statusEl.textContent = '⚠️ Etiqueta ' + etiqueta + ' já existe!';
@@ -885,7 +1548,17 @@
 
             registrarAuditoria('INSERIR_ITEM', `Inseriu item ${etiqueta} na prateleira ${prateleira}`);
 
-            estoqueCache.push({ etiqueta: etiqueta, prateleira: prateleira });
+            // Registrar no histórico
+            await window.firebaseDB.collection('historico').add({
+                etiqueta: etiqueta,
+                prateleira: prateleira,
+                acao: 'INSERÇÃO',
+                usuario: usuarioAtual.nome,
+                tipoUsuario: usuarioAtual.tipo,
+                timestamp: new Date().toISOString()
+            });
+
+            estoqueCache.push({ etiqueta: etiqueta, prateleira: prateleira, dataInsercao: new Date().toISOString(), usuarioInsercao: usuarioAtual.nome });
             contadorInseridos++;
 
             // Mostra status no modal sem fechar
@@ -1425,6 +2098,86 @@
     document.getElementById('login-senha').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') { e.preventDefault(); fazerLogin(); }
     });
+
+    // ========== BACKUP EXCEL ==========
+    async function backupExcel() {
+        if (!verificarPermissao('admin')) return;
+        try {
+            const querySnapshot = await window.firebaseDB.collection('estoque').get();
+            const dados = [];
+
+            querySnapshot.docs.forEach(doc => {
+                const d = doc.data();
+                dados.push({
+                    'Etiqueta': d.etiqueta || '',
+                    'Prateleira': d.prateleira || '',
+                    'Quem Alocou': d.usuarioInsercao || 'Lima',
+                    'Data Inserção': d.dataInsercao ? new Date(d.dataInsercao).toLocaleString() : 'Antes do sistema',
+                    'Status': String(d.prateleira) === '185595' ? 'TRANSITÓRIO' : 'ALOCADO'
+                });
+            });
+
+            if (dados.length === 0) {
+                alert('Nenhum item para fazer backup.');
+                return;
+            }
+
+            const ws = XLSX.utils.json_to_sheet(dados);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Backup Estoque');
+            XLSX.writeFile(wb, 'backup_estoque_' + new Date().toISOString().split('T')[0] + '.xlsx');
+            alert('✅ Backup exportado com ' + dados.length + ' itens!');
+        } catch (error) {
+            console.error('Erro ao fazer backup:', error);
+            alert('Erro ao exportar backup.');
+        }
+    }
+
+    // ========== LIMPAR BASE DE DADOS ==========
+    // Chamar via console: limparBaseDados()
+    async function limparBaseDados() {
+        if (!usuarioAtual || usuarioAtual.tipo !== 'admin') {
+            alert('Somente admin pode limpar a base!');
+            return;
+        }
+        if (!confirm('⚠️ ATENÇÃO: Isso vai APAGAR TODOS os itens do estoque!\n\nFez backup antes?\n\nDigite OK para confirmar.')) return;
+        if (!confirm('🔴 ÚLTIMA CHANCE! Tem certeza ABSOLUTA?')) return;
+
+        try {
+            const snapshot = await window.firebaseDB.collection('estoque').get();
+            const total = snapshot.size;
+            let removidos = 0;
+
+            // Firestore não tem deleteAll, precisa deletar um por um
+            const batch_size = 500;
+            let batch = window.firebaseDB.batch();
+            let count = 0;
+
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+                count++;
+                if (count >= batch_size) {
+                    batch.commit();
+                    batch = window.firebaseDB.batch();
+                    count = 0;
+                }
+            });
+
+            if (count > 0) await batch.commit();
+
+            estoqueCache = [];
+            localStorage.removeItem('estoqueCache');
+            atualizarContador();
+
+            registrarAuditoria('LIMPAR_BASE', 'Limpou toda a base de dados (' + total + ' itens removidos)');
+            alert('✅ Base limpa! ' + total + ' itens removidos.');
+        } catch (error) {
+            console.error('Erro ao limpar base:', error);
+            alert('Erro ao limpar: ' + error.message);
+        }
+    }
+    // Expor para console
+    window.limparBaseDados = limparBaseDados;
 
     // Inicializar sistema
     mostrarLogin();
